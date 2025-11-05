@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Onyx and Basil are moving from Denver CO to Berlin Germany in March 2026. Browse our moving sale items - all prices negotiable!">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#1a1a1a" media="(prefers-color-scheme: dark)">
+    <title>Onyx & Basil Moving Sale</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="styles/main.css">
+    <script src="scripts/main.js" defer></script>
+</head>
+<body>
+    <header class="hero-section" role="banner">
+        <div class="hero-content">
+            <h1 class="hero-title">Onyx and Basil are moving</h1>
+            <p class="hero-description">
+                We're getting ready for a big move from Denver to Berlin in March 2026, so we're trying to find new homes for lots of our belongings!
+
+We'd love for these items to go to people in our community. If you find something you'd really love to have but can't quite afford the price, please message us anyway! All prices are negotiable. We just genuinely want these things to go to good homes where they'll be used and appreciated.
+            </p>
+        </div>
+    </header>
+
+    <main role="main">
+        <section class="controls-section" aria-label="Filter and sort controls">
+            <div class="filters-container">
+                <h2 class="filters-title">Filter by tags:</h2>
+                <div class="tag-filters" role="group" aria-label="Tag filters">
+                    <!-- Tag buttons will be dynamically generated -->
+                </div>
+            </div>
+            <div class="sort-container">
+                <label for="sort-select" class="sort-label">Sort by:</label>
+                <select id="sort-select" class="sort-select" aria-label="Sort items">
+                    <option value="lowest">Lowest Price</option>
+                    <option value="highest">Highest Price</option>
+                    <option value="alphabetical">Alphabetical</option>
+                </select>
+            </div>
+        </section>
+
+        <section class="products-section" aria-label="Items for sale">
+            <div class="products-grid" id="products-grid" role="list">
+                <!-- Product cards will be dynamically generated -->
+            </div>
+            <div class="no-results" id="no-results" role="status" aria-live="polite" hidden>
+                <p>No items match your filters. Try selecting different tags.</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal for item details -->
+    <div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+        <div class="modal-content" role="document">
+            <button class="modal-close" id="modal-close" aria-label="Close modal">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+            <div class="modal-body" id="modal-body">
+                <!-- Modal content will be dynamically generated -->
+            </div>
+        </div>
+    </div>
+</body>
+</html>
