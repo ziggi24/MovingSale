@@ -36,6 +36,13 @@ const modalOverlay = document.getElementById("modal-overlay");
 const modalBody = document.getElementById("modal-body");
 const modalClose = document.getElementById("modal-close");
 
+// Fullscreen viewer elements
+const fullscreenViewer = document.getElementById("fullscreen-viewer");
+const fullscreenViewerClose = document.getElementById("fullscreen-viewer-close");
+const fullscreenViewerContainer = document.getElementById("fullscreen-viewer-container");
+const fullscreenViewerPrev = document.getElementById("fullscreen-viewer-prev");
+const fullscreenViewerNext = document.getElementById("fullscreen-viewer-next");
+
 // Auth elements
 const authBtn = document.getElementById("auth-btn");
 const authBtnMobile = document.getElementById("auth-btn-mobile");
@@ -627,12 +634,16 @@ function createProductCard(item, index) {
   card.setAttribute("aria-label", `Product: ${item.name}`);
   card.style.animationDelay = `${Math.min(index * 0.05, 0.4)}s`;
 
+  // Get images array - support both old img and new images array
+  const images = getItemImages(item);
+
   // Image wrapper for proper aspect ratio
   const imageWrapper = document.createElement("div");
   imageWrapper.className = "product-image-wrapper";
 
+  // Show first image
   const image = document.createElement("img");
-  image.src = normalizeImagePath(item.img);
+  image.src = normalizeImagePath(images[0] || "");
   image.alt = item.name || "Product image";
   image.className = "product-image";
   image.loading = "lazy";
@@ -648,6 +659,14 @@ function createProductCard(item, index) {
   };
 
   imageWrapper.appendChild(image);
+
+  // Add carousel indicator if multiple images
+  if (images.length > 1) {
+    const indicator = document.createElement("div");
+    indicator.className = "product-image-indicator";
+    indicator.innerHTML = `<i class="fas fa-images" aria-hidden="true"></i><span>${images.length}</span>`;
+    imageWrapper.appendChild(indicator);
+  }
 
   const info = document.createElement("div");
   info.className = "product-info";
@@ -705,6 +724,16 @@ function createProductCard(item, index) {
   return card;
 }
 
+function getItemImages(item) {
+  // Support both new images array and legacy img field
+  if (item.images && Array.isArray(item.images) && item.images.length > 0) {
+    return item.images;
+  } else if (item.img) {
+    return [item.img];
+  }
+  return [];
+}
+
 function normalizeImagePath(imgPath) {
   if (!imgPath) return "";
   if (imgPath.startsWith("/") || imgPath.startsWith("http")) {
@@ -719,30 +748,283 @@ function formatPrice(price) {
 }
 
 // =====================================================
+// FULLSCREEN IMAGE VIEWER
+// =====================================================
+let fullscreenViewerImages = [];
+let fullscreenViewerCurrentIndex = 0;
+let fullscreenViewerAltText = "Product image";
+
+function openFullscreenViewer(images, startIndex = 0, altText = "Product image") {
+  fullscreenViewerImages = images;
+  fullscreenViewerCurrentIndex = startIndex;
+  fullscreenViewerAltText = altText;
+  
+  // Show/hide navigation buttons based on image count
+  if (images.length > 1) {
+    fullscreenViewerPrev.hidden = false;
+    fullscreenViewerNext.hidden = false;
+  } else {
+    fullscreenViewerPrev.hidden = true;
+    fullscreenViewerNext.hidden = true;
+  }
+  
+  // Show the viewer
+  fullscreenViewer.hidden = false;
+  document.body.style.overflow = "hidden";
+  
+  // Display the image
+  showFullscreenImage(startIndex);
+  
+  // Focus the close button for accessibility
+  fullscreenViewerClose.focus();
+}
+
+function closeFullscreenViewer() {
+  fullscreenViewer.hidden = true;
+  document.body.style.overflow = "";
+  fullscreenViewerContainer.innerHTML = "";
+  fullscreenViewerImages = [];
+  fullscreenViewerCurrentIndex = 0;
+  fullscreenViewerAltText = "Product image";
+}
+
+function showFullscreenImage(index) {
+  fullscreenViewerContainer.innerHTML = "";
+  
+  const img = document.createElement("img");
+  img.src = normalizeImagePath(fullscreenViewerImages[index]);
+  img.alt = `${fullscreenViewerAltText} - Image ${index + 1}`;
+  img.className = "fullscreen-viewer__image";
+  img.onerror = function () {
+    this.style.display = "none";
+    const placeholder = document.createElement("div");
+    placeholder.className = "fullscreen-viewer__placeholder";
+    placeholder.innerHTML = '<i class="fas fa-image" aria-hidden="true"></i><p>Image not available</p>';
+    fullscreenViewerContainer.appendChild(placeholder);
+  };
+  
+  fullscreenViewerContainer.appendChild(img);
+  
+  // Update navigation button states
+  fullscreenViewerPrev.disabled = index === 0;
+  fullscreenViewerNext.disabled = index === fullscreenViewerImages.length - 1;
+  
+  fullscreenViewerCurrentIndex = index;
+}
+
+function nextFullscreenImage() {
+  if (fullscreenViewerCurrentIndex < fullscreenViewerImages.length - 1) {
+    showFullscreenImage(fullscreenViewerCurrentIndex + 1);
+  }
+}
+
+function prevFullscreenImage() {
+  if (fullscreenViewerCurrentIndex > 0) {
+    showFullscreenImage(fullscreenViewerCurrentIndex - 1);
+  }
+}
+
+// =====================================================
+// IMAGE CAROUSEL
+// =====================================================
+function createImageCarousel(images, altText, item = null) {
+  const carousel = document.createElement("div");
+  carousel.className = "image-carousel";
+  
+  const carouselContainer = document.createElement("div");
+  carouselContainer.className = "image-carousel__container";
+  
+  // Create image elements
+  const imageElements = images.map((imgSrc, index) => {
+    const imgWrapper = document.createElement("div");
+    imgWrapper.className = "image-carousel__slide";
+    if (index === 0) imgWrapper.classList.add("active");
+    
+    const img = document.createElement("img");
+    img.src = normalizeImagePath(imgSrc);
+    img.alt = `${altText} - Image ${index + 1}`;
+    img.className = "image-carousel__image";
+    img.style.cursor = "pointer";
+    img.onerror = function () {
+      this.classList.add("image-error");
+      this.alt = "Image not available";
+      this.style.opacity = "0";
+      this.style.cursor = "default";
+      const placeholder = document.createElement("div");
+      placeholder.className = "product-image-placeholder";
+      placeholder.innerHTML = '<i class="fas fa-image" aria-hidden="true"></i>';
+      imgWrapper.appendChild(placeholder);
+    };
+    
+    // Make image clickable to open fullscreen
+    img.addEventListener("click", () => {
+      openFullscreenViewer(images, index, altText);
+    });
+    
+    imgWrapper.appendChild(img);
+    return imgWrapper;
+  });
+  
+  imageElements.forEach(el => carouselContainer.appendChild(el));
+  
+  // Navigation arrows
+  const prevBtn = document.createElement("button");
+  prevBtn.className = "image-carousel__nav image-carousel__nav--prev";
+  prevBtn.setAttribute("aria-label", "Previous image");
+  prevBtn.innerHTML = '<i class="fas fa-chevron-left" aria-hidden="true"></i>';
+  
+  const nextBtn = document.createElement("button");
+  nextBtn.className = "image-carousel__nav image-carousel__nav--next";
+  nextBtn.setAttribute("aria-label", "Next image");
+  nextBtn.innerHTML = '<i class="fas fa-chevron-right" aria-hidden="true"></i>';
+  
+  // Pagination dots
+  const pagination = document.createElement("div");
+  pagination.className = "image-carousel__pagination";
+  images.forEach((_, index) => {
+    const dot = document.createElement("button");
+    dot.className = "image-carousel__dot";
+    if (index === 0) dot.classList.add("active");
+    dot.setAttribute("aria-label", `Go to image ${index + 1}`);
+    dot.setAttribute("data-index", index);
+    pagination.appendChild(dot);
+  });
+  
+  // Carousel state
+  let currentIndex = 0;
+  
+  // Navigation functions
+  const showSlide = (index) => {
+    // Update slides
+    imageElements.forEach((slide, i) => {
+      slide.classList.toggle("active", i === index);
+    });
+    
+    // Update dots
+    pagination.querySelectorAll(".image-carousel__dot").forEach((dot, i) => {
+      dot.classList.toggle("active", i === index);
+    });
+    
+    // Update button states
+    prevBtn.disabled = index === 0;
+    nextBtn.disabled = index === images.length - 1;
+    
+    currentIndex = index;
+  };
+  
+  const nextSlide = () => {
+    if (currentIndex < images.length - 1) {
+      showSlide(currentIndex + 1);
+    }
+  };
+  
+  const prevSlide = () => {
+    if (currentIndex > 0) {
+      showSlide(currentIndex - 1);
+    }
+  };
+  
+  // Event listeners
+  nextBtn.addEventListener("click", nextSlide);
+  prevBtn.addEventListener("click", prevSlide);
+  
+  pagination.querySelectorAll(".image-carousel__dot").forEach((dot) => {
+    dot.addEventListener("click", () => {
+      const index = parseInt(dot.getAttribute("data-index"));
+      showSlide(index);
+    });
+  });
+  
+  // Keyboard navigation
+  carousel.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      prevSlide();
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      nextSlide();
+    }
+  });
+  
+  // Swipe support for touch devices
+  let touchStartX = 0;
+  let touchEndX = 0;
+  
+  carouselContainer.addEventListener("touchstart", (e) => {
+    touchStartX = e.changedTouches[0].screenX;
+  });
+  
+  carouselContainer.addEventListener("touchend", (e) => {
+    touchEndX = e.changedTouches[0].screenX;
+    handleSwipe();
+  });
+  
+  function handleSwipe() {
+    const swipeThreshold = 50;
+    const diff = touchStartX - touchEndX;
+    
+    if (Math.abs(diff) > swipeThreshold) {
+      if (diff > 0) {
+        nextSlide();
+      } else {
+        prevSlide();
+      }
+    }
+  }
+  
+  // Assemble carousel
+  carousel.appendChild(carouselContainer);
+  carousel.appendChild(prevBtn);
+  carousel.appendChild(nextBtn);
+  carousel.appendChild(pagination);
+  carousel.setAttribute("tabindex", "0");
+  
+  // Initialize
+  showSlide(0);
+  
+  return carousel;
+}
+
+// =====================================================
 // MODAL
 // =====================================================
 function openModal(item) {
   modalBody.innerHTML = "";
 
-  // Image wrapper
+  // Get images array
+  const images = getItemImages(item);
+
+  // Image wrapper with carousel support
   const imageWrapper = document.createElement("div");
   imageWrapper.className = "modal-image-wrapper";
 
-  const image = document.createElement("img");
-  image.src = normalizeImagePath(item.img);
-  image.alt = item.name || "Product image";
-  image.className = "modal-image";
-  image.onerror = function () {
-    this.classList.add("image-error");
-    this.alt = "Image not available";
-    this.style.opacity = "0";
-    const placeholder = document.createElement("div");
-    placeholder.className = "product-image-placeholder";
-    placeholder.innerHTML = '<i class="fas fa-image" aria-hidden="true"></i>';
-    imageWrapper.appendChild(placeholder);
-  };
-
-  imageWrapper.appendChild(image);
+  if (images.length > 1) {
+    // Create carousel for multiple images
+    const carousel = createImageCarousel(images, item.name || "Product image", item);
+    imageWrapper.appendChild(carousel);
+  } else {
+    // Single image (no carousel needed)
+    const image = document.createElement("img");
+    image.src = normalizeImagePath(images[0] || "");
+    image.alt = item.name || "Product image";
+    image.className = "modal-image";
+    image.style.cursor = "pointer";
+    image.onerror = function () {
+      this.classList.add("image-error");
+      this.alt = "Image not available";
+      this.style.opacity = "0";
+      this.style.cursor = "default";
+      const placeholder = document.createElement("div");
+      placeholder.className = "product-image-placeholder";
+      placeholder.innerHTML = '<i class="fas fa-image" aria-hidden="true"></i>';
+      imageWrapper.appendChild(placeholder);
+    };
+    // Make image clickable to open fullscreen
+    if (images[0]) {
+      image.addEventListener("click", () => openFullscreenViewer(images, 0, item.name || "Product image"));
+    }
+    imageWrapper.appendChild(image);
+  }
 
   const name = document.createElement("h2");
   name.id = "modal-title";
@@ -903,6 +1185,18 @@ function setupEventListeners() {
 
   modalClose?.addEventListener("click", closeModal);
 
+  // Fullscreen viewer event listeners
+  fullscreenViewerClose?.addEventListener("click", closeFullscreenViewer);
+  fullscreenViewerPrev?.addEventListener("click", prevFullscreenImage);
+  fullscreenViewerNext?.addEventListener("click", nextFullscreenImage);
+
+  // Close fullscreen viewer when clicking outside the image (but not on buttons)
+  fullscreenViewer?.addEventListener("click", (e) => {
+    if (e.target === fullscreenViewer || (e.target === fullscreenViewerContainer && !e.target.closest("img"))) {
+      closeFullscreenViewer();
+    }
+  });
+
   modalOverlay?.addEventListener("click", (e) => {
     if (e.target === modalOverlay) {
       closeModal();
@@ -912,8 +1206,18 @@ function setupEventListeners() {
   clearFiltersBtn?.addEventListener("click", clearAllFilters);
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && modalOverlay?.classList.contains("open")) {
-      closeModal();
+    if (e.key === "Escape") {
+      if (!fullscreenViewer.hidden) {
+        closeFullscreenViewer();
+      } else if (modalOverlay?.classList.contains("open")) {
+        closeModal();
+      }
+    } else if (e.key === "ArrowLeft" && !fullscreenViewer.hidden && fullscreenViewerImages.length > 1) {
+      e.preventDefault();
+      prevFullscreenImage();
+    } else if (e.key === "ArrowRight" && !fullscreenViewer.hidden && fullscreenViewerImages.length > 1) {
+      e.preventDefault();
+      nextFullscreenImage();
     }
   });
 }

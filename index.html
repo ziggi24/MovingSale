@@ -160,5 +160,21 @@
             </div>
         </div>
     </div>
+
+    <!-- Fullscreen Image Viewer -->
+    <div class="fullscreen-viewer" id="fullscreen-viewer" hidden role="dialog" aria-modal="true" aria-label="Fullscreen image viewer">
+        <button class="fullscreen-viewer__close" id="fullscreen-viewer-close" aria-label="Close fullscreen viewer">
+            <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+        <div class="fullscreen-viewer__container" id="fullscreen-viewer-container">
+            <!-- Image will be dynamically inserted here -->
+        </div>
+        <button class="fullscreen-viewer__nav fullscreen-viewer__nav--prev" id="fullscreen-viewer-prev" aria-label="Previous image" hidden>
+            <i class="fas fa-chevron-left" aria-hidden="true"></i>
+        </button>
+        <button class="fullscreen-viewer__nav fullscreen-viewer__nav--next" id="fullscreen-viewer-next" aria-label="Next image" hidden>
+            <i class="fas fa-chevron-right" aria-hidden="true"></i>
+        </button>
+    </div>
 </body>
 </html>

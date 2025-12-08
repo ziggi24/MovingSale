@@ -143,7 +143,7 @@
       
       <form id="item-form" class="admin-modal__form">
         <input type="hidden" name="item-id" id="item-id">
-        <input type="hidden" name="img" id="img-url-input">
+        <input type="hidden" name="images" id="images-url-input">
         
         <div class="admin-form-grid">
           <label class="admin-field">
@@ -159,27 +159,24 @@
         
         <!-- Image Upload Section -->
         <div class="admin-field">
-          <span class="admin-field__label">Image</span>
+          <span class="admin-field__label">Images (up to 8)</span>
           <div class="admin-image-upload" id="image-upload-area">
-            <!-- Preview (hidden by default) -->
-            <div class="admin-image-preview" id="image-preview" hidden>
-              <img src="" alt="Preview" id="preview-img">
-              <button type="button" class="admin-image-preview__remove" id="remove-image" aria-label="Remove image">
-                <i class="fas fa-times" aria-hidden="true"></i>
-              </button>
-            </div>
-            
-            <!-- Upload Zone (shown when no image) -->
+            <!-- Upload Zone -->
             <div class="admin-image-dropzone" id="image-dropzone">
-              <input type="file" id="image-file-input" accept="image/*" hidden>
+              <input type="file" id="image-file-input" accept="image/*" multiple hidden>
               <div class="admin-image-dropzone__content">
                 <i class="fas fa-cloud-upload-alt" aria-hidden="true"></i>
-                <p>Drag & drop an image here</p>
+                <p>Drag & drop images here</p>
                 <span>or</span>
                 <button type="button" class="admin-btn admin-btn--secondary admin-btn--sm" id="browse-files-btn">
                   Browse Files
                 </button>
               </div>
+            </div>
+            
+            <!-- Uploaded Images Preview Grid -->
+            <div class="admin-images-preview-grid" id="images-preview-grid" hidden>
+              <!-- Images will be dynamically added here -->
             </div>
             
             <!-- Upload Progress -->

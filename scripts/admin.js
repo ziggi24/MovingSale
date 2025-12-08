@@ -54,18 +54,16 @@ const modalSubmit = document.getElementById("modal-submit");
 const modalSubmitText = document.getElementById("modal-submit-text");
 const modalStatus = document.getElementById("modal-status");
 const itemIdInput = document.getElementById("item-id");
-const imgUrlInput = document.getElementById("img-url-input");
+const imagesUrlInput = document.getElementById("images-url-input");
 
 // Image upload elements
 const imageUploadArea = document.getElementById("image-upload-area");
 const imageDropzone = document.getElementById("image-dropzone");
-const imagePreview = document.getElementById("image-preview");
-const previewImg = document.getElementById("preview-img");
+const imagesPreviewGrid = document.getElementById("images-preview-grid");
 const imageUploading = document.getElementById("image-uploading");
 const uploadProgress = document.getElementById("upload-progress");
 const imageFileInput = document.getElementById("image-file-input");
 const browseFilesBtn = document.getElementById("browse-files-btn");
-const removeImageBtn = document.getElementById("remove-image");
 const imageStatus = document.getElementById("image-status");
 
 // Theme elements
@@ -84,8 +82,9 @@ let items = [];
 let requests = [];
 let filterTerm = "";
 let editingItem = null;
-let currentImageUrl = "";
+let currentImages = []; // Array of image URLs
 let isUploading = false;
+let uploadingImageIndex = -1; // Track which image is currently uploading
 
 // =====================================================
 // CLOUDINARY UPLOAD
@@ -130,17 +129,12 @@ function initImageUpload() {
     imageFileInput?.click();
   });
 
-  // File input change
+  // File input change - handle multiple files
   imageFileInput?.addEventListener("change", (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleImageFile(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      handleImageFiles(files);
     }
-  });
-
-  // Remove image button
-  removeImageBtn?.addEventListener("click", () => {
-    clearImage();
   });
 
   // Drag and drop
@@ -158,9 +152,11 @@ function initImageUpload() {
     e.preventDefault();
     imageDropzone.classList.remove("dragover");
     
-    const file = e.dataTransfer?.files?.[0];
-    if (file && file.type.startsWith("image/")) {
-      handleImageFile(file);
+    const files = Array.from(e.dataTransfer?.files || []).filter(
+      file => file.type.startsWith("image/")
+    );
+    if (files.length > 0) {
+      handleImageFiles(files);
     }
   });
 
@@ -174,46 +170,82 @@ function initImageUpload() {
   });
 }
 
+async function handleImageFiles(files) {
+  // Filter to only image files
+  const imageFiles = files.filter(file => file.type.startsWith("image/"));
+  
+  if (imageFiles.length === 0) {
+    showImageStatus("Please select image files.", "error");
+    return;
+  }
+
+  // Check how many slots are available
+  const availableSlots = 8 - currentImages.length;
+  if (imageFiles.length > availableSlots) {
+    showImageStatus(`You can only upload ${availableSlots} more image(s). Maximum 8 images total.`, "error");
+    return;
+  }
+
+  // Validate each file
+  for (const file of imageFiles) {
+    if (file.size > 10 * 1024 * 1024) {
+      showImageStatus(`Image "${file.name}" must be less than 10MB.`, "error");
+      return;
+    }
+  }
+
+  // Process files sequentially
+  for (let i = 0; i < imageFiles.length; i++) {
+    const file = imageFiles[i];
+    await handleImageFile(file);
+  }
+  
+  // Clear file input
+  imageFileInput.value = "";
+}
+
 async function handleImageFile(file) {
-  // Validate file
-  if (!file.type.startsWith("image/")) {
-    showImageStatus("Please select an image file.", "error");
+  // Check if we've reached the limit
+  if (currentImages.length >= 8) {
+    showImageStatus("Maximum of 8 images allowed.", "error");
     return;
   }
 
-  // Check file size (max 10MB)
-  if (file.size > 10 * 1024 * 1024) {
-    showImageStatus("Image must be less than 10MB.", "error");
-    return;
-  }
-
-  // Show uploading state
+  // Show uploading state for this specific image
+  const imageIndex = currentImages.length;
+  uploadingImageIndex = imageIndex;
   showUploadingState();
   
   try {
     // Upload to Cloudinary
     const imageUrl = await uploadToCloudinary(file);
     
-    // Set the image URL
-    currentImageUrl = imageUrl;
-    imgUrlInput.value = imageUrl;
+    // Add to current images array
+    currentImages.push(imageUrl);
+    updateImagesInput();
     
-    // Show preview
-    showImagePreview(imageUrl);
-    showImageStatus("Image uploaded successfully!", "success");
+    // Add preview to grid
+    addImagePreview(imageUrl, imageIndex);
+    
+    // Update dropzone visibility
+    if (currentImages.length >= 8) {
+      imageDropzone.hidden = true;
+      showImageStatus("Maximum of 8 images reached.", "success");
+    } else {
+      showImageStatus(`Image ${currentImages.length} of 8 uploaded successfully!`, "success");
+    }
   } catch (error) {
     console.error("Upload error:", error);
     showImageStatus(`Upload failed: ${error.message}`, "error");
-    showDropzone();
   } finally {
     isUploading = false;
+    uploadingImageIndex = -1;
+    imageUploading.hidden = true;
   }
 }
 
 function showUploadingState() {
   isUploading = true;
-  imageDropzone.hidden = true;
-  imagePreview.hidden = true;
   imageUploading.hidden = false;
   
   // Animate progress bar (fake progress since we don't have real progress)
@@ -231,41 +263,86 @@ function showUploadingState() {
   imageUploading.dataset.interval = interval;
 }
 
-function showImagePreview(url) {
-  // Clear any progress interval
-  const interval = imageUploading.dataset.interval;
-  if (interval) {
-    clearInterval(parseInt(interval));
-    uploadProgress.style.width = "100%";
+function addImagePreview(url, index) {
+  // Show the preview grid if it's hidden
+  if (imagesPreviewGrid.hidden) {
+    imagesPreviewGrid.hidden = false;
   }
   
-  setTimeout(() => {
-    imageUploading.hidden = true;
-    imageDropzone.hidden = true;
-    imagePreview.hidden = false;
-    previewImg.src = url;
-    uploadProgress.style.width = "0%";
-  }, 300);
+  // Create preview element
+  const previewItem = document.createElement("div");
+  previewItem.className = "admin-image-preview-item";
+  previewItem.dataset.imageIndex = index;
+  
+  const img = document.createElement("img");
+  img.src = url;
+  img.alt = `Preview ${index + 1}`;
+  
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "admin-image-preview__remove";
+  removeBtn.setAttribute("aria-label", `Remove image ${index + 1}`);
+  removeBtn.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i>';
+  removeBtn.addEventListener("click", () => removeImage(index));
+  
+  previewItem.appendChild(img);
+  previewItem.appendChild(removeBtn);
+  imagesPreviewGrid.appendChild(previewItem);
 }
 
-function showDropzone() {
-  const interval = imageUploading.dataset.interval;
-  if (interval) {
-    clearInterval(parseInt(interval));
+function removeImage(index) {
+  // Remove from array
+  currentImages.splice(index, 1);
+  
+  // Update the input
+  updateImagesInput();
+  
+  // Re-render preview grid
+  renderImagePreviews();
+  
+  // Show dropzone if we have less than 8 images
+  if (currentImages.length < 8) {
+    imageDropzone.hidden = false;
   }
   
-  imageUploading.hidden = true;
-  imagePreview.hidden = true;
-  imageDropzone.hidden = false;
-  uploadProgress.style.width = "0%";
+  // Update status
+  if (currentImages.length === 0) {
+    showImageStatus("", "");
+  } else {
+    showImageStatus(`${currentImages.length} image(s) uploaded.`, "success");
+  }
 }
 
-function clearImage() {
-  currentImageUrl = "";
-  imgUrlInput.value = "";
-  previewImg.src = "";
+function renderImagePreviews() {
+  // Clear existing previews
+  imagesPreviewGrid.innerHTML = "";
+  
+  if (currentImages.length === 0) {
+    imagesPreviewGrid.hidden = true;
+    return;
+  }
+  
+  // Show grid
+  imagesPreviewGrid.hidden = false;
+  
+  // Add preview for each image
+  currentImages.forEach((url, index) => {
+    addImagePreview(url, index);
+  });
+}
+
+function updateImagesInput() {
+  // Update hidden input with JSON array
+  imagesUrlInput.value = JSON.stringify(currentImages);
+}
+
+function clearImages() {
+  currentImages = [];
+  imagesUrlInput.value = "";
+  imagesPreviewGrid.innerHTML = "";
+  imagesPreviewGrid.hidden = true;
   imageFileInput.value = "";
-  showDropzone();
+  imageDropzone.hidden = false;
   showImageStatus("", "");
 }
 
@@ -359,7 +436,7 @@ function openModal(item = null) {
   editingItem = item;
   itemForm.reset();
   modalStatus.hidden = true;
-  clearImage();
+  clearImages();
   
   if (item) {
     // Edit mode
@@ -374,11 +451,24 @@ function openModal(item = null) {
     itemForm.tags.value = (item.tags || []).join(", ");
     itemForm.description.value = item.description || "";
     
-    // If item has an image, show preview
-    if (item.img) {
-      currentImageUrl = item.img;
-      imgUrlInput.value = item.img;
-      showImagePreview(item.img);
+    // Handle images - support both old single img and new images array
+    if (item.images && Array.isArray(item.images)) {
+      currentImages = [...item.images];
+    } else if (item.img) {
+      // Legacy support: convert single img to array
+      currentImages = [item.img];
+    } else {
+      currentImages = [];
+    }
+    
+    updateImagesInput();
+    renderImagePreviews();
+    
+    // Show/hide dropzone based on image count
+    if (currentImages.length >= 8) {
+      imageDropzone.hidden = true;
+    } else {
+      imageDropzone.hidden = false;
     }
   } else {
     // Add mode
@@ -386,6 +476,8 @@ function openModal(item = null) {
     modalSubmitText.textContent = "Add Item";
     modalDelete.hidden = true;
     itemIdInput.value = "";
+    currentImages = [];
+    imageDropzone.hidden = false;
   }
   
   itemModal.classList.add("open");
@@ -406,7 +498,7 @@ function closeModal() {
   document.body.style.overflow = "";
   editingItem = null;
   itemForm.reset();
-  clearImage();
+  clearImages();
   modalStatus.hidden = true;
 }
 
@@ -577,10 +669,23 @@ function buildItemPayload(formData) {
     .map((t) => t.trim())
     .filter(Boolean);
   const priceValue = formData.get("price");
+  
+  // Parse images array from JSON string
+  let images = [];
+  const imagesJson = formData.get("images");
+  if (imagesJson) {
+    try {
+      images = JSON.parse(imagesJson);
+    } catch (e) {
+      console.error("Failed to parse images JSON:", e);
+    }
+  }
+  
   return {
     name: formData.get("name") || "",
     price: priceValue ? Number(priceValue) : null,
-    img: formData.get("img") || "",
+    images: images, // Store as array
+    img: images.length > 0 ? images[0] : "", // Keep img for backward compatibility
     tags,
     description: formData.get("description") || "",
   };
