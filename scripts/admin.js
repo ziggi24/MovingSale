@@ -438,6 +438,9 @@ function openModal(item = null) {
   modalStatus.hidden = true;
   clearImages();
   
+  // Reset submit button state
+  modalSubmit.disabled = false;
+  
   if (item) {
     // Edit mode
     modalTitle.textContent = "Edit Item";
@@ -450,6 +453,7 @@ function openModal(item = null) {
     itemForm.price.value = item.price ?? "";
     itemForm.tags.value = (item.tags || []).join(", ");
     itemForm.description.value = item.description || "";
+    itemForm.productLink.value = item.productLink || "";
     
     // Handle images - support both old single img and new images array
     if (item.images && Array.isArray(item.images)) {
@@ -500,6 +504,8 @@ function closeModal() {
   itemForm.reset();
   clearImages();
   modalStatus.hidden = true;
+  // Reset submit button state when closing
+  modalSubmit.disabled = false;
 }
 
 // =====================================================
@@ -688,6 +694,7 @@ function buildItemPayload(formData) {
     img: images.length > 0 ? images[0] : "", // Keep img for backward compatibility
     tags,
     description: formData.get("description") || "",
+    productLink: formData.get("productLink") || "",
   };
 }
 

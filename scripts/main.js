@@ -1050,6 +1050,17 @@ function openModal(item) {
   description.className = "modal-description";
   description.textContent = item.description || "No description available.";
 
+  // Product link (if available)
+  let productLinkElement = null;
+  if (item.productLink) {
+    productLinkElement = document.createElement("a");
+    productLinkElement.href = item.productLink;
+    productLinkElement.target = "_blank";
+    productLinkElement.rel = "noopener noreferrer";
+    productLinkElement.className = "modal-product-link";
+    productLinkElement.innerHTML = '<i class="fas fa-link" aria-hidden="true"></i><span>Original Product</span>';
+  }
+
   const requestSection = document.createElement("div");
   requestSection.className = "request-section";
 
@@ -1074,6 +1085,9 @@ function openModal(item) {
   modalBody.appendChild(price);
   modalBody.appendChild(tagsContainer);
   modalBody.appendChild(description);
+  if (productLinkElement) {
+    modalBody.appendChild(productLinkElement);
+  }
   modalBody.appendChild(requestSection);
 
   modalOverlay.classList.add("open");

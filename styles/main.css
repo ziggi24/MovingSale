@@ -1407,6 +1407,31 @@ a {
     margin-bottom: var(--space-xl);
 }
 
+.modal-product-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    margin-bottom: var(--space-xl);
+}
+
+.modal-product-link:hover {
+    background: var(--color-accent);
+    color: var(--color-bg);
+    transform: translateY(-1px);
+}
+
+.modal-product-link i {
+    font-size: 0.85rem;
+}
+
 /* Request Form in Modal */
 .request-section {
     padding-top: var(--space-lg);
