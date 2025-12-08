@@ -338,7 +338,7 @@ function initHeroGlobe() {
   // After a brief pause, smoothly animate camera all the way to Berlin in one continuous motion
   setTimeout(() => {
     globe.pointOfView({ lat: berlin.lat, lng: berlin.lng, altitude: altitudeEnd }, 8000);
-  }, 1200);
+  }, 1800);
 
   // Subtle auto-rotation
   globe.controls().autoRotate = true;
@@ -1101,6 +1101,13 @@ function openModal(item) {
     requestContent.hidden = isExpanded;
     requestToggleBtn.classList.toggle("expanded", !isExpanded);
     requestToggleBtn.setAttribute("aria-expanded", !isExpanded);
+    
+    // Scroll to show the expanded content
+    if (!isExpanded) {
+      setTimeout(() => {
+        requestContent.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
+    }
   });
 
   requestSection.appendChild(requestToggleBtn);
@@ -1132,10 +1139,13 @@ function buildRequestForm(item) {
     currentUser?.displayName || ""
   );
   const contactField = createInputField(
-    "Contact info (email or phone)",
+    "Contact",
     "request-contact",
-    currentUser?.email || ""
+    ""
   );
+  // Add placeholder text to the contact input
+  const contactInput = contactField.querySelector("input");
+  contactInput.placeholder = "email, phone, insta, etc.";
   const noteField = document.createElement("label");
   noteField.className = "field";
   noteField.textContent = "Notes (optional)";
@@ -1182,6 +1192,11 @@ function buildRequestForm(item) {
       status.hidden = false;
       form.reset();
       submit.textContent = "Submitted";
+      
+      // Wait 2 seconds then refresh to return to home screen
+      setTimeout(() => {
+        window.location.href = window.location.origin + window.location.pathname;
+      }, 2000);
     } catch (err) {
       console.error("Failed to submit request", err);
       status.textContent = "Error submitting request. Please try again.";
