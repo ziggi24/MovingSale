@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Console • Onyx & Basil Moving Sale</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="styles/main.css">
+  <script type="module" src="scripts/admin.js"></script>
+</head>
+<body class="admin-page">
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  
+  <!-- Header / Navigation -->
+  <header class="header" role="banner">
+    <div class="header-container">
+      <a href="index.html" class="logo">
+        <span class="logo-text">Onyx & Basil</span>
+      </a>
+      
+      <!-- Desktop Navigation -->
+      <nav class="nav-desktop" aria-label="Primary">
+        <a href="index.html" class="nav-link">Shop</a>
+        <a href="admin.html" class="nav-link active" aria-current="page">Admin</a>
+      </nav>
+
+      <div class="header-actions">
+        <!-- Theme Toggle (Desktop) -->
+        <button class="theme-toggle" id="theme-toggle-desktop" aria-label="Toggle dark/light mode" title="Toggle theme">
+          <i class="fas fa-sun" aria-hidden="true"></i>
+          <i class="fas fa-moon" aria-hidden="true"></i>
+        </button>
+
+        <!-- User Profile Icon -->
+        <a href="profile.html" id="profile-link" class="profile-btn" hidden aria-label="My profile and requests">
+          <i class="fas fa-user-circle" aria-hidden="true"></i>
+        </a>
+
+        <!-- Login Button -->
+        <button id="auth-btn" class="auth-btn" type="button">
+          <span class="auth-text">Login</span>
+          <i class="fas fa-sign-in-alt auth-icon" aria-hidden="true"></i>
+        </button>
+
+        <!-- Hamburger Menu Button (Mobile) -->
+        <button class="hamburger" id="hamburger-btn" aria-label="Open menu" aria-expanded="false">
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu" id="mobile-menu" hidden>
+      <div class="mobile-menu-content">
+        <nav class="nav-mobile" aria-label="Mobile navigation">
+          <a href="index.html" class="mobile-nav-link">Shop</a>
+          <a href="profile.html" id="profile-link-mobile" class="mobile-nav-link" hidden>My Requests</a>
+          <a href="admin.html" class="mobile-nav-link active" aria-current="page">Admin</a>
+        </nav>
+        <div class="mobile-menu-footer">
+          <button class="theme-toggle-mobile" id="theme-toggle-mobile" aria-label="Toggle dark/light mode">
+            <i class="fas fa-sun" aria-hidden="true"></i>
+            <span>Light Mode</span>
+          </button>
+          <button id="auth-btn-mobile" class="auth-btn-mobile" type="button">
+            <i class="fas fa-sign-in-alt" aria-hidden="true"></i>
+            <span>Login with Google</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content" class="admin-shell">
+    <!-- Admin Message -->
+    <div id="admin-message" class="admin-callout" hidden></div>
+
+    <!-- Admin Layout: Sidebar + Content -->
+    <div class="admin-layout">
+      <!-- Items Panel -->
+      <section class="admin-panel admin-panel--items">
+        <header class="admin-panel__header">
+          <div>
+            <h1 class="admin-panel__title">Items</h1>
+            <p class="admin-panel__subtitle">Manage your sale items</p>
+          </div>
+          <button class="admin-add-btn" id="add-item-btn" type="button">
+            <i class="fas fa-plus" aria-hidden="true"></i>
+            <span>Add Item</span>
+          </button>
+        </header>
+        
+        <div class="admin-items-list" id="items-list">
+          <!-- Items will be rendered here -->
+        </div>
+        <div id="items-loading" class="admin-loading">Loading items…</div>
+        <div id="items-empty" class="admin-empty" hidden>
+          <i class="fas fa-box-open" aria-hidden="true"></i>
+          <p>No items yet. Add your first item!</p>
+        </div>
+      </section>
+
+      <!-- Requests Panel -->
+      <section class="admin-panel admin-panel--requests">
+        <header class="admin-panel__header">
+          <div>
+            <h2 class="admin-panel__title">Requests</h2>
+            <p class="admin-panel__subtitle">Incoming buyer requests</p>
+          </div>
+          <div class="admin-search">
+            <i class="fas fa-search" aria-hidden="true"></i>
+            <input type="text" id="request-search" placeholder="Search requests..." aria-label="Search requests">
+          </div>
+        </header>
+        
+        <div class="admin-requests-list" id="requests-list">
+          <!-- Requests will be rendered here -->
+        </div>
+        <div id="requests-loading" class="admin-loading">Loading requests…</div>
+        <div id="requests-empty" class="admin-empty" hidden>
+          <i class="fas fa-inbox" aria-hidden="true"></i>
+          <p>No requests yet.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Item Modal (Add/Edit) -->
+  <div class="admin-modal-overlay" id="item-modal" hidden>
+    <div class="admin-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <header class="admin-modal__header">
+        <h2 id="modal-title" class="admin-modal__title">Add Item</h2>
+        <button class="admin-modal__close" id="modal-close" aria-label="Close modal">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </header>
+      
+      <form id="item-form" class="admin-modal__form">
+        <input type="hidden" name="item-id" id="item-id">
+        <input type="hidden" name="img" id="img-url-input">
+        
+        <div class="admin-form-grid">
+          <label class="admin-field">
+            <span class="admin-field__label">Name *</span>
+            <input type="text" name="name" required placeholder="Item name">
+          </label>
+          
+          <label class="admin-field">
+            <span class="admin-field__label">Price</span>
+            <input type="number" name="price" min="0" step="1" placeholder="0">
+          </label>
+        </div>
+        
+        <!-- Image Upload Section -->
+        <div class="admin-field">
+          <span class="admin-field__label">Image</span>
+          <div class="admin-image-upload" id="image-upload-area">
+            <!-- Preview (hidden by default) -->
+            <div class="admin-image-preview" id="image-preview" hidden>
+              <img src="" alt="Preview" id="preview-img">
+              <button type="button" class="admin-image-preview__remove" id="remove-image" aria-label="Remove image">
+                <i class="fas fa-times" aria-hidden="true"></i>
+              </button>
+            </div>
+            
+            <!-- Upload Zone (shown when no image) -->
+            <div class="admin-image-dropzone" id="image-dropzone">
+              <input type="file" id="image-file-input" accept="image/*" hidden>
+              <div class="admin-image-dropzone__content">
+                <i class="fas fa-cloud-upload-alt" aria-hidden="true"></i>
+                <p>Drag & drop an image here</p>
+                <span>or</span>
+                <button type="button" class="admin-btn admin-btn--secondary admin-btn--sm" id="browse-files-btn">
+                  Browse Files
+                </button>
+              </div>
+            </div>
+            
+            <!-- Upload Progress -->
+            <div class="admin-image-uploading" id="image-uploading" hidden>
+              <div class="admin-image-uploading__spinner">
+                <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+              </div>
+              <p>Uploading image...</p>
+              <div class="admin-progress-bar">
+                <div class="admin-progress-bar__fill" id="upload-progress"></div>
+              </div>
+            </div>
+          </div>
+          <p class="admin-field__hint" id="image-status"></p>
+        </div>
+        
+        <label class="admin-field">
+          <span class="admin-field__label">Tags</span>
+          <input type="text" name="tags" placeholder="furniture, electronics, kitchen">
+        </label>
+        
+        <label class="admin-field">
+          <span class="admin-field__label">Description</span>
+          <textarea name="description" rows="3" placeholder="Describe the item..."></textarea>
+        </label>
+        
+        <div class="admin-modal__actions">
+          <button type="button" class="admin-btn admin-btn--secondary" id="modal-cancel">Cancel</button>
+          <button type="button" class="admin-btn admin-btn--danger" id="modal-delete" hidden>
+            <i class="fas fa-trash" aria-hidden="true"></i>
+            Delete
+          </button>
+          <button type="submit" class="admin-btn admin-btn--primary" id="modal-submit">
+            <i class="fas fa-check" aria-hidden="true"></i>
+            <span id="modal-submit-text">Add Item</span>
+          </button>
+        </div>
+        
+        <p class="admin-modal__status" id="modal-status" hidden></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-content">
+      <p class="footer-text">Made with <i class="fas fa-heart" aria-hidden="true"></i> by Onyx & Basil</p>
+    </div>
+  </footer>
+</body>
+</html>

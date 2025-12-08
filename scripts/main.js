@@ -1,362 +1,653 @@
-// State management
+import {
+  auth,
+  provider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  db,
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  addDoc,
+  serverTimestamp,
+  checkIsAdmin,
+} from "./firebaseClient.js";
+
+// =====================================================
+// STATE
+// =====================================================
 let allItems = [];
 let filteredItems = [];
 let activeTags = new Set();
-let currentSort = 'lowest';
+let currentSort = "lowest";
+let currentUser = null;
+let isAdmin = false;
 
-// DOM elements
-const productsGrid = document.getElementById('products-grid');
-const tagFiltersContainer = document.querySelector('.tag-filters');
-const sortSelect = document.getElementById('sort-select');
-const noResults = document.getElementById('no-results');
-const modalOverlay = document.getElementById('modal-overlay');
-const modalBody = document.getElementById('modal-body');
-const modalClose = document.getElementById('modal-close');
+// =====================================================
+// DOM ELEMENTS
+// =====================================================
+const productsGrid = document.getElementById("products-grid");
+const tagFiltersContainer = document.querySelector(".tag-filters");
+const sortSelect = document.getElementById("sort-select");
+const noResults = document.getElementById("no-results");
+const clearFiltersBtn = document.getElementById("clear-filters");
+const modalOverlay = document.getElementById("modal-overlay");
+const modalBody = document.getElementById("modal-body");
+const modalClose = document.getElementById("modal-close");
 
-// Initialize the application
+// Auth elements
+const authBtn = document.getElementById("auth-btn");
+const authBtnMobile = document.getElementById("auth-btn-mobile");
+const profileLink = document.getElementById("profile-link");
+const profileLinkMobile = document.getElementById("profile-link-mobile");
+const adminLink = document.getElementById("admin-link");
+const adminLinkMobile = document.getElementById("admin-link-mobile");
+
+// Theme elements
+const themeToggleDesktop = document.getElementById("theme-toggle-desktop");
+const themeToggleMobile = document.getElementById("theme-toggle-mobile");
+
+// Mobile menu elements
+const hamburgerBtn = document.getElementById("hamburger-btn");
+const mobileMenu = document.getElementById("mobile-menu");
+
+// =====================================================
+// THEME MANAGEMENT
+// =====================================================
+function initTheme() {
+  // Check for saved theme preference, system preference, or default to dark
+  const savedTheme = localStorage.getItem("theme");
+  
+  if (savedTheme) {
+    setTheme(savedTheme);
+  } else {
+    // Check system preference
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const prefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
+    
+    if (prefersLight) {
+      setTheme("light");
+    } else {
+      // Default to dark if system preference is dark or cannot be determined
+      setTheme("dark");
+    }
+  }
+  
+  // Listen for system theme changes
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+    if (!localStorage.getItem("theme")) {
+      setTheme(e.matches ? "dark" : "light");
+    }
+  });
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("theme", theme);
+  updateThemeToggleText(theme);
+}
+
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute("data-theme");
+  const newTheme = currentTheme === "dark" ? "light" : "dark";
+  setTheme(newTheme);
+}
+
+function updateThemeToggleText(theme) {
+  const mobileToggle = document.getElementById("theme-toggle-mobile");
+  if (mobileToggle) {
+    const textSpan = mobileToggle.querySelector("span");
+    if (textSpan) {
+      textSpan.textContent = theme === "dark" ? "Light Mode" : "Dark Mode";
+    }
+  }
+}
+
+// =====================================================
+// MOBILE MENU
+// =====================================================
+function toggleMobileMenu() {
+  const isOpen = mobileMenu.classList.contains("open");
+  
+  if (isOpen) {
+    closeMobileMenu();
+  } else {
+    openMobileMenu();
+  }
+}
+
+function openMobileMenu() {
+  mobileMenu.classList.add("open");
+  hamburgerBtn.classList.add("active");
+  hamburgerBtn.setAttribute("aria-expanded", "true");
+  hamburgerBtn.setAttribute("aria-label", "Close menu");
+  document.body.style.overflow = "hidden";
+}
+
+function closeMobileMenu() {
+  mobileMenu.classList.remove("open");
+  hamburgerBtn.classList.remove("active");
+  hamburgerBtn.setAttribute("aria-expanded", "false");
+  hamburgerBtn.setAttribute("aria-label", "Open menu");
+  document.body.style.overflow = "";
+}
+
+// =====================================================
+// INITIALIZATION
+// =====================================================
 async function init() {
-    try {
-        const response = await fetch('assets/list.json');
-        if (!response.ok) {
-            throw new Error('Failed to fetch items');
-        }
-        allItems = await response.json();
-        
-        // Extract unique tags
-        const uniqueTags = extractUniqueTags(allItems);
-        
-        // Render tag filters
-        renderTagFilters(uniqueTags);
-        
-        // Initial render
-        filteredItems = [...allItems];
-        applyFiltersAndSort();
-        
-        // Set up event listeners
-        setupEventListeners();
-    } catch (error) {
-        console.error('Error loading items:', error);
-        productsGrid.innerHTML = '<p style="text-align: center; padding: 2rem;">Error loading items. Please refresh the page.</p>';
-    }
+  initTheme();
+  bindGlobalEvents();
+  watchAuth();
+  await loadItems();
+  setupEventListeners();
 }
 
-// Extract unique tags from all items
-function extractUniqueTags(items) {
-    const tagSet = new Set();
-    items.forEach(item => {
-        if (item.tags && Array.isArray(item.tags)) {
-            item.tags.forEach(tag => tagSet.add(tag));
-        }
-    });
-    return Array.from(tagSet).sort();
-}
-
-// Render tag filter buttons
-function renderTagFilters(tags) {
-    tagFiltersContainer.innerHTML = '';
-    
-    tags.forEach(tag => {
-        const button = document.createElement('button');
-        button.className = 'tag-filter-btn';
-        button.textContent = tag;
-        button.setAttribute('aria-pressed', 'false');
-        button.setAttribute('data-tag', tag);
-        button.addEventListener('click', () => toggleTagFilter(tag, button));
-        tagFiltersContainer.appendChild(button);
-    });
-}
-
-// Toggle tag filter
-function toggleTagFilter(tag, button) {
-    if (activeTags.has(tag)) {
-        activeTags.delete(tag);
-        button.classList.remove('active');
-        button.setAttribute('aria-pressed', 'false');
+function bindGlobalEvents() {
+  // Auth buttons
+  const handleAuthClick = () => {
+    if (currentUser) {
+      signOut(auth);
     } else {
-        activeTags.add(tag);
-        button.classList.add('active');
-        button.setAttribute('aria-pressed', 'true');
+      signInWithPopup(auth, provider).catch((err) =>
+        console.error("Login failed", err)
+      );
     }
+    closeMobileMenu();
+  };
+
+  authBtn?.addEventListener("click", handleAuthClick);
+  authBtnMobile?.addEventListener("click", handleAuthClick);
+
+  // Theme toggles
+  themeToggleDesktop?.addEventListener("click", toggleTheme);
+  themeToggleMobile?.addEventListener("click", () => {
+    toggleTheme();
+  });
+
+  // Hamburger menu
+  hamburgerBtn?.addEventListener("click", toggleMobileMenu);
+
+  // Close mobile menu when clicking nav links
+  mobileMenu?.querySelectorAll(".mobile-nav-link").forEach((link) => {
+    link.addEventListener("click", closeMobileMenu);
+  });
+
+  // Close mobile menu on escape
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && mobileMenu?.classList.contains("open")) {
+      closeMobileMenu();
+    }
+  });
+}
+
+function watchAuth() {
+  onAuthStateChanged(auth, async (user) => {
+    currentUser = user;
+    isAdmin = await checkIsAdmin(user?.uid);
+    updateAuthUI();
+  });
+}
+
+function updateAuthUI() {
+  const updateButton = (btn, isMobile = false) => {
+    if (!btn) return;
+    
+    if (currentUser) {
+      if (isMobile) {
+        btn.innerHTML = `<i class="fas fa-sign-out-alt" aria-hidden="true"></i><span>Logout</span>`;
+      } else {
+        btn.innerHTML = `<span class="auth-text">Logout</span><i class="fas fa-sign-out-alt auth-icon" aria-hidden="true"></i>`;
+      }
+    } else {
+      if (isMobile) {
+        btn.innerHTML = `<i class="fas fa-sign-in-alt" aria-hidden="true"></i><span>Login with Google</span>`;
+      } else {
+        btn.innerHTML = `<span class="auth-text">Login</span><i class="fas fa-sign-in-alt auth-icon" aria-hidden="true"></i>`;
+      }
+    }
+  };
+
+  updateButton(authBtn, false);
+  updateButton(authBtnMobile, true);
+
+  // Show/hide profile links
+  if (profileLink) profileLink.hidden = !currentUser;
+  if (profileLinkMobile) profileLinkMobile.hidden = !currentUser;
+
+  // Show/hide admin links
+  if (adminLink) adminLink.hidden = !isAdmin;
+  if (adminLinkMobile) adminLinkMobile.hidden = !isAdmin;
+}
+
+// =====================================================
+// DATA LOADING
+// =====================================================
+async function loadItems() {
+  try {
+    const q = query(collection(db, "items"), orderBy("name"));
+    const snapshot = await getDocs(q);
+    allItems = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const uniqueTags = extractUniqueTags(allItems);
+    renderTagFilters(uniqueTags);
+    filteredItems = [...allItems];
     applyFiltersAndSort();
+  } catch (error) {
+    console.error("Error loading items:", error);
+    productsGrid.innerHTML = `
+      <div style="grid-column: 1/-1; text-align: center; padding: 3rem;">
+        <p style="color: var(--color-text-muted);">Error loading items. Please refresh the page.</p>
+      </div>
+    `;
+  }
 }
 
-// Apply filters and sort
+function extractUniqueTags(items) {
+  const tagSet = new Set();
+  items.forEach((item) => {
+    if (item.tags && Array.isArray(item.tags)) {
+      item.tags.forEach((tag) => tagSet.add(tag));
+    }
+  });
+  return Array.from(tagSet).sort();
+}
+
+// =====================================================
+// FILTERS & SORTING
+// =====================================================
+function renderTagFilters(tags) {
+  tagFiltersContainer.innerHTML = "";
+
+  tags.forEach((tag) => {
+    const button = document.createElement("button");
+    button.className = "tag-filter-btn";
+    button.textContent = tag;
+    button.setAttribute("aria-pressed", "false");
+    button.setAttribute("data-tag", tag);
+    button.addEventListener("click", () => toggleTagFilter(tag, button));
+    tagFiltersContainer.appendChild(button);
+  });
+}
+
+function toggleTagFilter(tag, button) {
+  if (activeTags.has(tag)) {
+    activeTags.delete(tag);
+    button.classList.remove("active");
+    button.setAttribute("aria-pressed", "false");
+  } else {
+    activeTags.add(tag);
+    button.classList.add("active");
+    button.setAttribute("aria-pressed", "true");
+  }
+  applyFiltersAndSort();
+}
+
+function clearAllFilters() {
+  activeTags.clear();
+  document.querySelectorAll(".tag-filter-btn").forEach((btn) => {
+    btn.classList.remove("active");
+    btn.setAttribute("aria-pressed", "false");
+  });
+  applyFiltersAndSort();
+}
+
 function applyFiltersAndSort() {
-    // Filter by tags
-    if (activeTags.size === 0) {
-        filteredItems = [...allItems];
-    } else {
-        filteredItems = allItems.filter(item => {
-            if (!item.tags || !Array.isArray(item.tags)) return false;
-            return item.tags.some(tag => activeTags.has(tag));
-        });
-    }
-    
-    // Sort items
-    sortItems();
-    
-    // Render items
-    renderItems();
-    
-    // Show/hide no results message
-    if (filteredItems.length === 0) {
-        noResults.removeAttribute('hidden');
-        productsGrid.setAttribute('hidden', '');
-    } else {
-        noResults.setAttribute('hidden', '');
-        productsGrid.removeAttribute('hidden');
-    }
+  if (activeTags.size === 0) {
+    filteredItems = [...allItems];
+  } else {
+    filteredItems = allItems.filter((item) => {
+      if (!item.tags || !Array.isArray(item.tags)) return false;
+      return item.tags.some((tag) => activeTags.has(tag));
+    });
+  }
+
+  sortItems();
+  renderItems();
+
+  if (filteredItems.length === 0) {
+    noResults.removeAttribute("hidden");
+    productsGrid.setAttribute("hidden", "");
+  } else {
+    noResults.setAttribute("hidden", "");
+    productsGrid.removeAttribute("hidden");
+  }
 }
 
-// Sort items based on current sort option
 function sortItems() {
-    switch (currentSort) {
-        case 'lowest':
-            filteredItems.sort((a, b) => (a.price || 0) - (b.price || 0));
-            break;
-        case 'highest':
-            filteredItems.sort((a, b) => (b.price || 0) - (a.price || 0));
-            break;
-        case 'alphabetical':
-            filteredItems.sort((a, b) => {
-                const nameA = (a.name || '').toLowerCase();
-                const nameB = (b.name || '').toLowerCase();
-                return nameA.localeCompare(nameB);
-            });
-            break;
-    }
+  switch (currentSort) {
+    case "lowest":
+      filteredItems.sort((a, b) => (a.price || 0) - (b.price || 0));
+      break;
+    case "highest":
+      filteredItems.sort((a, b) => (b.price || 0) - (a.price || 0));
+      break;
+    case "alphabetical":
+      filteredItems.sort((a, b) => {
+        const nameA = (a.name || "").toLowerCase();
+        const nameB = (b.name || "").toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+      break;
+  }
 }
 
-// Render product cards
+// =====================================================
+// RENDERING
+// =====================================================
 function renderItems() {
-    productsGrid.innerHTML = '';
-    
-    filteredItems.forEach((item, index) => {
-        const card = createProductCard(item, index);
-        productsGrid.appendChild(card);
-    });
+  productsGrid.innerHTML = "";
+
+  filteredItems.forEach((item, index) => {
+    const card = createProductCard(item, index);
+    productsGrid.appendChild(card);
+  });
 }
 
-// Create a product card element
 function createProductCard(item, index) {
-    const card = document.createElement('article');
-    card.className = 'product-card';
-    card.setAttribute('role', 'listitem');
-    card.setAttribute('tabindex', '0');
-    card.setAttribute('aria-label', `Product: ${item.name}`);
-    
-    // Image
-    const image = document.createElement('img');
-    image.src = normalizeImagePath(item.img);
-    image.alt = item.name || 'Product image';
-    image.className = 'product-image';
-    image.loading = 'lazy';
-    image.onerror = function() {
-        this.classList.add('image-error');
-        this.alt = 'Image not available';
-    };
-    
-    // Product info container
-    const info = document.createElement('div');
-    info.className = 'product-info';
-    
-    // Name
-    const name = document.createElement('h3');
-    name.className = 'product-name';
-    name.textContent = item.name || 'Unnamed Item';
-    
-    // Price
-    const price = document.createElement('div');
-    price.className = 'product-price';
-    price.textContent = formatPrice(item.price);
-    
-    // Tags
-    const tagsContainer = document.createElement('div');
-    tagsContainer.className = 'product-tags';
-    if (item.tags && Array.isArray(item.tags)) {
-        item.tags.forEach(tag => {
-            const tagElement = document.createElement('span');
-            tagElement.className = 'product-tag';
-            tagElement.textContent = tag;
-            tagsContainer.appendChild(tagElement);
-        });
+  const card = document.createElement("article");
+  card.className = "product-card";
+  card.setAttribute("role", "listitem");
+  card.setAttribute("tabindex", "0");
+  card.setAttribute("aria-label", `Product: ${item.name}`);
+  card.style.animationDelay = `${Math.min(index * 0.05, 0.4)}s`;
+
+  // Image wrapper for proper aspect ratio
+  const imageWrapper = document.createElement("div");
+  imageWrapper.className = "product-image-wrapper";
+
+  const image = document.createElement("img");
+  image.src = normalizeImagePath(item.img);
+  image.alt = item.name || "Product image";
+  image.className = "product-image";
+  image.loading = "lazy";
+  image.onerror = function () {
+    this.classList.add("image-error");
+    this.alt = "Image not available";
+    // Add placeholder icon
+    const placeholder = document.createElement("div");
+    placeholder.className = "product-image-placeholder";
+    placeholder.innerHTML = '<i class="fas fa-image" aria-hidden="true"></i>';
+    imageWrapper.appendChild(placeholder);
+    this.style.opacity = "0";
+  };
+
+  imageWrapper.appendChild(image);
+
+  const info = document.createElement("div");
+  info.className = "product-info";
+
+  const name = document.createElement("h3");
+  name.className = "product-name";
+  name.textContent = item.name || "Unnamed Item";
+
+  const price = document.createElement("div");
+  price.className = "product-price";
+  price.textContent = formatPrice(item.price);
+
+  const tagsContainer = document.createElement("div");
+  tagsContainer.className = "product-tags";
+  if (item.tags && Array.isArray(item.tags)) {
+    item.tags.forEach((tag) => {
+      const tagElement = document.createElement("span");
+      tagElement.className = "product-tag";
+      tagElement.textContent = tag;
+      tagsContainer.appendChild(tagElement);
+    });
+  }
+
+  const descriptionPreview = document.createElement("p");
+  descriptionPreview.className = "product-description-preview";
+  descriptionPreview.textContent =
+    item.description || "No description available.";
+
+  const requestBtn = document.createElement("button");
+  requestBtn.type = "button";
+  requestBtn.className = "request-btn";
+  requestBtn.textContent = "Request Item";
+  requestBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openModal(item);
+  });
+
+  info.appendChild(name);
+  info.appendChild(price);
+  info.appendChild(tagsContainer);
+  info.appendChild(descriptionPreview);
+  info.appendChild(requestBtn);
+
+  card.appendChild(imageWrapper);
+  card.appendChild(info);
+
+  card.addEventListener("click", () => openModal(item));
+  card.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openModal(item);
     }
-    
-    // Description preview
-    const descriptionPreview = document.createElement('p');
-    descriptionPreview.className = 'product-description-preview';
-    descriptionPreview.textContent = item.description || 'No description available.';
-    
-    // Want it button
-    const wantItBtn = document.createElement('a');
-    wantItBtn.href = generateMailtoLink(item.name);
-    wantItBtn.className = 'want-it-btn';
-    wantItBtn.textContent = 'I want it';
-    wantItBtn.setAttribute('aria-label', `Contact about ${item.name}`);
-    
-    // Prevent card click when clicking button
-    wantItBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-    });
-    
-    // Assemble card
-    info.appendChild(name);
-    info.appendChild(price);
-    info.appendChild(tagsContainer);
-    info.appendChild(descriptionPreview);
-    info.appendChild(wantItBtn);
-    
-    card.appendChild(image);
-    card.appendChild(info);
-    
-    // Add click handler to open modal
-    card.addEventListener('click', () => openModal(item));
-    card.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            openModal(item);
-        }
-    });
-    
-    return card;
+  });
+
+  return card;
 }
 
-// Normalize image path to ensure it's correct
 function normalizeImagePath(imgPath) {
-    if (!imgPath) return '';
-    // If path already starts with /, it's already absolute
-    if (imgPath.startsWith('/')) {
-        return imgPath;
-    }
-    // If path starts with http:// or https://, it's a full URL
-    if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) {
-        return imgPath;
-    }
-    // For relative paths, ensure they're relative to the document root
-    // Since HTML is at root, paths like "assets/img/file.png" should work as-is
-    // But if the server requires absolute paths, add leading slash
-    // Try relative first (most common case)
+  if (!imgPath) return "";
+  if (imgPath.startsWith("/") || imgPath.startsWith("http")) {
     return imgPath;
+  }
+  return imgPath;
 }
 
-// Format price
 function formatPrice(price) {
-    if (price === null || price === undefined) return 'Price negotiable';
-    return `$${price.toLocaleString()}`;
+  if (price === null || price === undefined) return "Price negotiable";
+  return `$${price.toLocaleString()}`;
 }
 
-// Generate mailto link
-function generateMailtoLink(itemName) {
-    const subject = encodeURIComponent(`Im interested in: ${itemName}`);
-    const emails = 'onyxem2@gmail.com,ziggi24@gmail.com';
-    return `mailto:${emails}?subject=${subject}`;
-}
-
-// Open modal with item details
+// =====================================================
+// MODAL
+// =====================================================
 function openModal(item) {
-    modalBody.innerHTML = '';
-    
-    // Image
-    const image = document.createElement('img');
-    image.src = normalizeImagePath(item.img);
-    image.alt = item.name || 'Product image';
-    image.className = 'modal-image';
-    image.onerror = function() {
-        this.classList.add('image-error');
-        this.alt = 'Image not available';
-    };
-    
-    // Name
-    const name = document.createElement('h2');
-    name.id = 'modal-title';
-    name.className = 'modal-name';
-    name.textContent = item.name || 'Unnamed Item';
-    
-    // Price
-    const price = document.createElement('div');
-    price.className = 'modal-price';
-    price.textContent = formatPrice(item.price);
-    
-    // Tags
-    const tagsContainer = document.createElement('div');
-    tagsContainer.className = 'modal-tags';
-    if (item.tags && Array.isArray(item.tags)) {
-        item.tags.forEach(tag => {
-            const tagElement = document.createElement('span');
-            tagElement.className = 'modal-tag';
-            tagElement.textContent = tag;
-            tagsContainer.appendChild(tagElement);
-        });
+  modalBody.innerHTML = "";
+
+  // Image wrapper
+  const imageWrapper = document.createElement("div");
+  imageWrapper.className = "modal-image-wrapper";
+
+  const image = document.createElement("img");
+  image.src = normalizeImagePath(item.img);
+  image.alt = item.name || "Product image";
+  image.className = "modal-image";
+  image.onerror = function () {
+    this.classList.add("image-error");
+    this.alt = "Image not available";
+    this.style.opacity = "0";
+    const placeholder = document.createElement("div");
+    placeholder.className = "product-image-placeholder";
+    placeholder.innerHTML = '<i class="fas fa-image" aria-hidden="true"></i>';
+    imageWrapper.appendChild(placeholder);
+  };
+
+  imageWrapper.appendChild(image);
+
+  const name = document.createElement("h2");
+  name.id = "modal-title";
+  name.className = "modal-name";
+  name.textContent = item.name || "Unnamed Item";
+
+  const price = document.createElement("div");
+  price.className = "modal-price";
+  price.textContent = formatPrice(item.price);
+
+  const tagsContainer = document.createElement("div");
+  tagsContainer.className = "modal-tags";
+  if (item.tags && Array.isArray(item.tags)) {
+    item.tags.forEach((tag) => {
+      const tagElement = document.createElement("span");
+      tagElement.className = "modal-tag";
+      tagElement.textContent = tag;
+      tagsContainer.appendChild(tagElement);
+    });
+  }
+
+  const description = document.createElement("p");
+  description.className = "modal-description";
+  description.textContent = item.description || "No description available.";
+
+  const requestSection = document.createElement("div");
+  requestSection.className = "request-section";
+
+  if (!currentUser) {
+    const loginPrompt = document.createElement("p");
+    loginPrompt.className = "request-login";
+    loginPrompt.textContent = "Please login to request this item.";
+    const loginBtn = document.createElement("button");
+    loginBtn.type = "button";
+    loginBtn.className = "primary-btn";
+    loginBtn.innerHTML = '<i class="fab fa-google" style="margin-right: 0.5rem;"></i>Login with Google';
+    loginBtn.addEventListener("click", () => authBtn.click());
+    requestSection.appendChild(loginPrompt);
+    requestSection.appendChild(loginBtn);
+  } else {
+    const form = buildRequestForm(item);
+    requestSection.appendChild(form);
+  }
+
+  modalBody.appendChild(imageWrapper);
+  modalBody.appendChild(name);
+  modalBody.appendChild(price);
+  modalBody.appendChild(tagsContainer);
+  modalBody.appendChild(description);
+  modalBody.appendChild(requestSection);
+
+  modalOverlay.classList.add("open");
+  modalOverlay.setAttribute("aria-hidden", "false");
+  modalClose.focus();
+  document.body.style.overflow = "hidden";
+}
+
+function buildRequestForm(item) {
+  const form = document.createElement("form");
+  form.className = "request-form";
+
+  const nameField = createInputField(
+    "Your name",
+    "request-name",
+    currentUser?.displayName || ""
+  );
+  const contactField = createInputField(
+    "Contact info (email or phone)",
+    "request-contact",
+    currentUser?.email || ""
+  );
+  const noteField = document.createElement("label");
+  noteField.className = "field";
+  noteField.textContent = "Notes (optional)";
+  const textarea = document.createElement("textarea");
+  textarea.id = "request-note";
+  textarea.name = "request-note";
+  textarea.placeholder = "When are you available? Any questions?";
+  noteField.appendChild(textarea);
+
+  const status = document.createElement("p");
+  status.className = "request-status";
+  status.hidden = true;
+
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "primary-btn";
+  submit.textContent = "Submit Request";
+
+  form.appendChild(nameField);
+  form.appendChild(contactField);
+  form.appendChild(noteField);
+  form.appendChild(submit);
+  form.appendChild(status);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    submit.disabled = true;
+    submit.textContent = "Submitting...";
+    status.hidden = true;
+    try {
+      await addDoc(collection(db, "requests"), {
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
+        userName: currentUser.displayName || "",
+        contactName: form.querySelector("#request-name").value.trim(),
+        contactInfo: form.querySelector("#request-contact").value.trim(),
+        note: textarea.value.trim(),
+        itemId: item.id,
+        itemName: item.name,
+        status: "new",
+        createdAt: serverTimestamp(),
+      });
+      status.textContent = "✓ Request submitted successfully!";
+      status.hidden = false;
+      form.reset();
+      submit.textContent = "Submitted";
+    } catch (err) {
+      console.error("Failed to submit request", err);
+      status.textContent = "Error submitting request. Please try again.";
+      status.hidden = false;
+      submit.disabled = false;
+      submit.textContent = "Submit Request";
     }
-    
-    // Description
-    const description = document.createElement('p');
-    description.className = 'modal-description';
-    description.textContent = item.description || 'No description available.';
-    
-    // Want it button
-    const wantItBtn = document.createElement('a');
-    wantItBtn.href = generateMailtoLink(item.name);
-    wantItBtn.className = 'modal-want-it-btn';
-    wantItBtn.textContent = 'I want it';
-    wantItBtn.setAttribute('aria-label', `Contact about ${item.name}`);
-    
-    // Assemble modal
-    modalBody.appendChild(image);
-    modalBody.appendChild(name);
-    modalBody.appendChild(price);
-    modalBody.appendChild(tagsContainer);
-    modalBody.appendChild(description);
-    modalBody.appendChild(wantItBtn);
-    
-    // Show modal
-    modalOverlay.removeAttribute('hidden');
-    modalOverlay.setAttribute('aria-hidden', 'false');
-    
-    // Focus management
-    modalClose.focus();
-    
-    // Prevent body scroll
-    document.body.style.overflow = 'hidden';
+  });
+
+  return form;
 }
 
-// Close modal
+function createInputField(labelText, id, value = "") {
+  const wrapper = document.createElement("label");
+  wrapper.className = "field";
+  wrapper.setAttribute("for", id);
+  wrapper.textContent = labelText;
+  const input = document.createElement("input");
+  input.id = id;
+  input.name = id;
+  input.value = value;
+  input.required = true;
+  wrapper.appendChild(input);
+  return wrapper;
+}
+
 function closeModal() {
-    modalOverlay.setAttribute('hidden', '');
-    modalOverlay.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
+  modalOverlay.classList.remove("open");
+  modalOverlay.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
 }
 
-// Setup event listeners
+// =====================================================
+// EVENT LISTENERS
+// =====================================================
 function setupEventListeners() {
-    // Sort select change
-    sortSelect.addEventListener('change', (e) => {
-        currentSort = e.target.value;
-        applyFiltersAndSort();
-    });
-    
-    // Modal close button
-    modalClose.addEventListener('click', closeModal);
-    
-    // Close modal on backdrop click
-    modalOverlay.addEventListener('click', (e) => {
-        if (e.target === modalOverlay) {
-            closeModal();
-        }
-    });
-    
-    // Close modal on Escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !modalOverlay.hasAttribute('hidden')) {
-            closeModal();
-        }
-    });
+  sortSelect?.addEventListener("change", (e) => {
+    currentSort = e.target.value;
+    applyFiltersAndSort();
+  });
+
+  modalClose?.addEventListener("click", closeModal);
+
+  modalOverlay?.addEventListener("click", (e) => {
+    if (e.target === modalOverlay) {
+      closeModal();
+    }
+  });
+
+  clearFiltersBtn?.addEventListener("click", clearAllFilters);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modalOverlay?.classList.contains("open")) {
+      closeModal();
+    }
+  });
 }
 
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+// =====================================================
+// BOOTSTRAP
+// =====================================================
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
 } else {
-    init();
+  init();
 }
-

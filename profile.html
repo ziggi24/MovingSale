@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Requests • Onyx & Basil Moving Sale</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="styles/main.css">
+  <script type="module" src="scripts/profile.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  
+  <!-- Header / Navigation -->
+  <header class="header" role="banner">
+    <div class="header-container">
+      <a href="index.html" class="logo">
+        <span class="logo-text">Onyx & Basil</span>
+      </a>
+      
+      <!-- Desktop Navigation -->
+      <nav class="nav-desktop" aria-label="Primary">
+        <a href="index.html" class="nav-link">Shop</a>
+        <a href="admin.html" id="admin-link" class="nav-link" hidden>Admin</a>
+      </nav>
+
+      <div class="header-actions">
+        <!-- Theme Toggle (Desktop) -->
+        <button class="theme-toggle" id="theme-toggle-desktop" aria-label="Toggle dark/light mode" title="Toggle theme">
+          <i class="fas fa-sun" aria-hidden="true"></i>
+          <i class="fas fa-moon" aria-hidden="true"></i>
+        </button>
+
+        <!-- User Profile Icon (Active) -->
+        <a href="profile.html" class="profile-btn active" aria-label="My profile and requests" aria-current="page">
+          <i class="fas fa-user-circle" aria-hidden="true"></i>
+        </a>
+
+        <!-- Login Button -->
+        <button id="auth-btn" class="auth-btn" type="button">
+          <span class="auth-text">Login</span>
+          <i class="fas fa-sign-in-alt auth-icon" aria-hidden="true"></i>
+        </button>
+
+        <!-- Hamburger Menu Button (Mobile) -->
+        <button class="hamburger" id="hamburger-btn" aria-label="Open menu" aria-expanded="false">
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu" id="mobile-menu" hidden>
+      <div class="mobile-menu-content">
+        <nav class="nav-mobile" aria-label="Mobile navigation">
+          <a href="index.html" class="mobile-nav-link">Shop</a>
+          <a href="profile.html" class="mobile-nav-link active" aria-current="page">My Requests</a>
+          <a href="admin.html" id="admin-link-mobile" class="mobile-nav-link" hidden>Admin</a>
+        </nav>
+        <div class="mobile-menu-footer">
+          <button class="theme-toggle-mobile" id="theme-toggle-mobile" aria-label="Toggle dark/light mode">
+            <i class="fas fa-sun" aria-hidden="true"></i>
+            <span>Light Mode</span>
+          </button>
+          <button id="auth-btn-mobile" class="auth-btn-mobile" type="button">
+            <i class="fas fa-sign-in-alt" aria-hidden="true"></i>
+            <span>Login with Google</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content" class="page-shell">
+    <section class="panel animate-slide-up">
+      <header class="panel-header">
+        <div>
+          <p class="eyebrow">Your account</p>
+          <h1 style="font-family: var(--font-display); font-size: 2rem;">My Requests</h1>
+        </div>
+      </header>
+      <div id="profile-message" class="callout" hidden></div>
+      <div id="requests-loading" class="loading">Loading your requests…</div>
+      <div id="requests-empty" class="muted" hidden>No requests yet. <a href="index.html" style="color: var(--color-accent);">Browse items</a></div>
+      <div id="requests-list" class="request-list"></div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-content">
+      <p class="footer-text">Made with <i class="fas fa-heart" aria-hidden="true"></i> by Onyx & Basil</p>
+    </div>
+  </footer>
+</body>
+</html>
