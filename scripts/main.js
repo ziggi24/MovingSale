@@ -166,6 +166,88 @@ function initHeroGlobe() {
     point: isDark ? '#d4a574' : '#8b6b4a',
   };
 
+  // Generate smooth comet tail arc layers programmatically
+  // Optimized for performance: fewer layers with better interpolation
+  const generateCometTailArcs = () => {
+    const arcs = [];
+    const numLayers = 24; // Smooth gradient layers
+    
+    // Easing functions for smooth transitions
+    const easeOutExpo = (t) => t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+    const easeInQuad = (t) => t * t;
+    const easeOutQuad = (t) => 1 - (1 - t) * (1 - t);
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+    
+    // Color ranges (dark theme / light theme)
+    const colorStart = isDark 
+      ? { r: 212, g: 165, b: 116 }  // Tail end color
+      : { r: 139, g: 107, b: 74 };
+    const colorEnd = isDark 
+      ? { r: 255, g: 245, b: 225 }  // Bright front color
+      : { r: 210, g: 180, b: 145 };
+    
+    // Add subtle base arc first (always visible track)
+    arcs.push({
+      startLat: denver.lat,
+      startLng: denver.lng,
+      endLat: berlin.lat,
+      endLng: berlin.lng,
+      color: `rgba(${colorStart.r}, ${colorStart.g}, ${colorStart.b}, 0.15)`,
+      stroke: 0.2,
+      dashLength: 1,
+      dashGap: 0,
+      animateTime: 0,
+      altitude: 0.45
+    });
+    
+    // Generate smooth gradient comet tail/body layers with tapered front
+    for (let i = 0; i < numLayers; i++) {
+      const t = i / (numLayers - 1); // 0 to 1 (tail to head)
+      
+      // Apply dithering offset to break up banding
+      const ditherOffset = ((i * 7919) % 100) / 8000;
+      const tDithered = Math.min(1, Math.max(0, t + ditherOffset - 0.006));
+      
+      // Opacity: smooth increase toward the head - stays bright at front
+      const opacity = 0.02 + easeInQuad(tDithered) * 0.72;
+      
+      // Stroke: thicker at tail, smoothly thinner at head for natural taper
+      // Use cubic easing for smooth taper that creates pointed appearance
+      const stroke = 3.8 - easeOutCubic(tDithered) * 3.55;
+      
+      // Dash length: keep consistent to maintain solid comet body
+      const dashLength = 0.26;
+      
+      // Color: interpolate from tail color to bright head color
+      const colorT = easeOutExpo(tDithered);
+      const r = Math.round(colorStart.r + (colorEnd.r - colorStart.r) * colorT);
+      const g = Math.round(colorStart.g + (colorEnd.g - colorStart.g) * colorT);
+      const b = Math.round(colorStart.b + (colorEnd.b - colorStart.b) * colorT);
+      
+      // Micro-altitude variation to prevent z-fighting
+      const altitudeOffset = 0.00015 * i;
+      
+      // Front layers animate slightly faster, creating a tapered leading edge
+      // The thinner layers (higher t) arrive slightly ahead
+      const animOffset = easeOutCubic(tDithered) * 400;
+      
+      arcs.push({
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${r}, ${g}, ${b}, ${opacity.toFixed(3)})`,
+        stroke: stroke,
+        dashLength: dashLength,
+        dashGap: 1 - dashLength,
+        animateTime: 12000 - animOffset,
+        altitude: 0.451 + altitudeOffset
+      });
+    }
+    
+    return arcs;
+  };
+
   const globe = Globe()
     .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
     .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
@@ -173,145 +255,8 @@ function initHeroGlobe() {
     .showAtmosphere(true)
     .atmosphereColor(colors.arc)
     .atmosphereAltitude(0.15)
-    // Arcs: solid base arc + comet-tail gradient pulse (bright front, fading tail)
-    .arcsData([
-      // Solid base arc (very subtle)
-      {
-        startLat: denver.lat,
-        startLng: denver.lng,
-        endLat: berlin.lat,
-        endLng: berlin.lng,
-        color: `rgba(${isDark ? '212, 165, 116' : '139, 107, 74'}, 0.25)`,
-        stroke: 0.25,
-        dashLength: 1,
-        dashGap: 0,
-        animateTime: 0,
-        altitude: 0.45
-      },
-      // Comet tail layers - longer = further back in tail, shorter = front
-      // Tail end (longest, most transparent)
-      {
-        startLat: denver.lat,
-        startLng: denver.lng,
-        endLat: berlin.lat,
-        endLng: berlin.lng,
-        color: `rgba(${isDark ? '212, 165, 116' : '139, 107, 74'}, 0.03)`,
-        stroke: 3.5,
-        dashLength: 0.28,
-        dashGap: 0.72,
-        animateTime: 12000,
-        altitude: 0.451
-      },
-      {
-        startLat: denver.lat,
-        startLng: denver.lng,
-        endLat: berlin.lat,
-        endLng: berlin.lng,
-        color: `rgba(${isDark ? '215, 170, 120' : '145, 112, 78'}, 0.05)`,
-        stroke: 3.0,
-        dashLength: 0.25,
-        dashGap: 0.75,
-        animateTime: 12000,
-        altitude: 0.451
-      },
-      {
-        startLat: denver.lat,
-        startLng: denver.lng,
-        endLat: berlin.lat,
-        endLng: berlin.lng,
-        color: `rgba(${isDark ? '218, 175, 125' : '150, 117, 82'}, 0.07)`,
-        stroke: 2.6,
-        dashLength: 0.22,
-        dashGap: 0.78,
-        animateTime: 12000,
-        altitude: 0.451
-      },
-      {
-        startLat: denver.lat,
-        startLng: denver.lng,
-        endLat: berlin.lat,
-        endLng: berlin.lng,
-        color: `rgba(${isDark ? '222, 180, 130' : '155, 122, 86'}, 0.10)`,
-        stroke: 2.2,
-        dashLength: 0.19,
-        dashGap: 0.81,
-        animateTime: 12000,
-        altitude: 0.451
-      },
-      {
-        startLat: denver.lat,
-        startLng: denver.lng,
-        endLat: berlin.lat,
-        endLng: berlin.lng,
-        color: `rgba(${isDark ? '226, 185, 138' : '160, 127, 90'}, 0.14)`,
-        stroke: 1.9,
-        dashLength: 0.16,
-        dashGap: 0.84,
-        animateTime: 12000,
-        altitude: 0.451
-      },
-      {
-        startLat: denver.lat,
-        startLng: denver.lng,
-        endLat: berlin.lat,
-        endLng: berlin.lng,
-        color: `rgba(${isDark ? '230, 190, 145' : '165, 132, 95'}, 0.19)`,
-        stroke: 1.6,
-        dashLength: 0.13,
-        dashGap: 0.87,
-        animateTime: 12000,
-        altitude: 0.451
-      },
-      {
-        startLat: denver.lat,
-        startLng: denver.lng,
-        endLat: berlin.lat,
-        endLng: berlin.lng,
-        color: `rgba(${isDark ? '235, 198, 155' : '172, 140, 102'}, 0.26)`,
-        stroke: 1.3,
-        dashLength: 0.10,
-        dashGap: 0.90,
-        animateTime: 12000,
-        altitude: 0.451
-      },
-      {
-        startLat: denver.lat,
-        startLng: denver.lng,
-        endLat: berlin.lat,
-        endLng: berlin.lng,
-        color: `rgba(${isDark ? '240, 208, 168' : '180, 150, 112'}, 0.38)`,
-        stroke: 1.0,
-        dashLength: 0.07,
-        dashGap: 0.93,
-        animateTime: 12000,
-        altitude: 0.451
-      },
-      {
-        startLat: denver.lat,
-        startLng: denver.lng,
-        endLat: berlin.lat,
-        endLng: berlin.lng,
-        color: `rgba(${isDark ? '248, 222, 188' : '190, 162, 125'}, 0.55)`,
-        stroke: 0.7,
-        dashLength: 0.05,
-        dashGap: 0.95,
-        animateTime: 12000,
-        altitude: 0.451
-      },
-      // Bright front (shortest, brightest)
-      {
-        startLat: denver.lat,
-        startLng: denver.lng,
-        endLat: berlin.lat,
-        endLng: berlin.lng,
-        color: `rgba(${isDark ? '255, 242, 220' : '210, 180, 145'}, 0.9)`,
-        stroke: 0.4,
-        dashLength: 0.03,
-        dashGap: 0.97,
-        animateTime: 12000,
-        altitude: 0.451
-      }
-    ])
+    // Arcs: solid base arc + smooth comet-tail gradient pulse
+    .arcsData(generateCometTailArcs())
     .arcColor('color')
     .arcDashLength('dashLength')
     .arcDashGap('dashGap')
@@ -332,8 +277,13 @@ function initHeroGlobe() {
   // Higher altitude for mobile to ensure Berlin is fully visible and centered
   const altitudeEnd = isMobile ? 2.5 : 2.0;
   
-  // Start camera at Denver
+  // Start camera at Denver (instant, no transition)
   globe.pointOfView({ lat: denver.lat, lng: denver.lng, altitude: altitudeStart }, 0);
+  
+  // Fade in the globe after 0.5s delay to hide the initial positioning spin
+  setTimeout(() => {
+    globeContainer.classList.add('globe-ready');
+  }, 500);
   
   // After a brief pause, smoothly animate camera all the way to Berlin in one continuous motion
   setTimeout(() => {

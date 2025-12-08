@@ -581,9 +581,10 @@ a {
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    opacity: 0.35;
+    opacity: 0;
     z-index: 0;
     overflow: hidden;
+    transition: opacity 0.5s ease-out;
     mask-image: radial-gradient(
         ellipse 80% 70% at 50% 50%,
         black 30%,
@@ -606,6 +607,10 @@ a {
     height: 140% !important;
 }
 
+.hero-globe.globe-ready {
+    opacity: 0.35;
+}
+
 /* Ensure hero content stays above globe */
 .hero-content {
     position: relative;
@@ -618,7 +623,7 @@ a {
 
 /* Adjust globe on smaller screens - zoom out for better context */
 @media (max-width: 768px) {
-    .hero-globe {
+    .hero-globe.globe-ready {
         opacity: 0.25;
     }
 
