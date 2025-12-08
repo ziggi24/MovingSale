@@ -325,19 +325,19 @@ function initHeroGlobe() {
     .pointsMerge(true)
     (globeContainer);
 
-  // Camera animation: start at Denver, travel along arc to view of both cities
+  // Camera animation: start at Denver, smoothly travel to Berlin in one continuous motion
   const isMobile = window.innerWidth < 768;
   const altitudeStart = isMobile ? 1.8 : 1.4;
-  const altitudeEnd = isMobile ? 2.8 : 2.2;
+  // Higher altitude for mobile to ensure Berlin is fully visible and centered
+  const altitudeEnd = isMobile ? 2.5 : 2.0;
   
   // Start camera at Denver
   globe.pointOfView({ lat: denver.lat, lng: denver.lng, altitude: altitudeStart }, 0);
   
-  // After a brief pause, animate camera along the journey towards Berlin
+  // After a brief pause, smoothly animate camera all the way to Berlin in one continuous motion
   setTimeout(() => {
-    // First move to mid-Atlantic view (showing the arc)
-    globe.pointOfView({ lat: 48, lng: -30, altitude: altitudeEnd }, 4000);
-  }, 1500);
+    globe.pointOfView({ lat: berlin.lat, lng: berlin.lng, altitude: altitudeEnd }, 8000);
+  }, 1200);
 
   // Subtle auto-rotation
   globe.controls().autoRotate = true;
