@@ -58,6 +58,7 @@ const themeToggleMobile = document.getElementById("theme-toggle-mobile");
 // Mobile menu elements
 const hamburgerBtn = document.getElementById("hamburger-btn");
 const mobileMenu = document.getElementById("mobile-menu");
+const mobileMenuClose = document.getElementById("mobile-menu-close");
 
 // =====================================================
 // THEME MANAGEMENT
@@ -450,6 +451,9 @@ function bindGlobalEvents() {
 
   // Hamburger menu
   hamburgerBtn?.addEventListener("click", toggleMobileMenu);
+
+  // Mobile menu close button
+  mobileMenuClose?.addEventListener("click", closeMobileMenu);
 
   // Close mobile menu when clicking nav links
   mobileMenu?.querySelectorAll(".mobile-nav-link").forEach((link) => {
@@ -1064,6 +1068,17 @@ function openModal(item) {
   const requestSection = document.createElement("div");
   requestSection.className = "request-section";
 
+  // Create the toggle button
+  const requestToggleBtn = document.createElement("button");
+  requestToggleBtn.type = "button";
+  requestToggleBtn.className = "request-toggle-btn";
+  requestToggleBtn.innerHTML = '<i class="fas fa-hand-paper" aria-hidden="true"></i><span>Request?</span>';
+  
+  // Create the expandable content container
+  const requestContent = document.createElement("div");
+  requestContent.className = "request-content";
+  requestContent.hidden = true;
+
   if (!currentUser) {
     const loginPrompt = document.createElement("p");
     loginPrompt.className = "request-login";
@@ -1073,12 +1088,23 @@ function openModal(item) {
     loginBtn.className = "primary-btn";
     loginBtn.innerHTML = '<i class="fab fa-google" style="margin-right: 0.5rem;"></i>Login with Google';
     loginBtn.addEventListener("click", () => authBtn.click());
-    requestSection.appendChild(loginPrompt);
-    requestSection.appendChild(loginBtn);
+    requestContent.appendChild(loginPrompt);
+    requestContent.appendChild(loginBtn);
   } else {
     const form = buildRequestForm(item);
-    requestSection.appendChild(form);
+    requestContent.appendChild(form);
   }
+
+  // Toggle functionality
+  requestToggleBtn.addEventListener("click", () => {
+    const isExpanded = !requestContent.hidden;
+    requestContent.hidden = isExpanded;
+    requestToggleBtn.classList.toggle("expanded", !isExpanded);
+    requestToggleBtn.setAttribute("aria-expanded", !isExpanded);
+  });
+
+  requestSection.appendChild(requestToggleBtn);
+  requestSection.appendChild(requestContent);
 
   modalBody.appendChild(imageWrapper);
   modalBody.appendChild(name);

@@ -793,6 +793,48 @@ async function loadRequests() {
   }
 }
 
+// Status options for cycling
+const STATUS_OPTIONS = ['new', 'contacted', 'pending', 'sold', 'declined'];
+const STATUS_LABELS = {
+  new: 'New',
+  contacted: 'Contacted',
+  pending: 'Pending',
+  sold: 'Sold',
+  declined: 'Declined'
+};
+
+function formatRequestDate(timestamp) {
+  if (!timestamp) return null;
+  
+  // Handle Firestore timestamp
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+  
+  const timeStr = date.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  });
+  
+  if (isToday) {
+    return `Today at ${timeStr}`;
+  } else if (isYesterday) {
+    return `Yesterday at ${timeStr}`;
+  } else {
+    const dateStr = date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
+    return `${dateStr} at ${timeStr}`;
+  }
+}
+
 function renderRequests() {
   requestsList.innerHTML = "";
   
@@ -819,49 +861,208 @@ function renderRequests() {
   filtered.forEach((r) => {
     const card = document.createElement("article");
     card.className = "admin-request-card";
+    
+    // Determine current status
+    const currentStatus = r.status || 'new';
 
+    // Header section with item name and timestamp
     const header = document.createElement("header");
     header.className = "admin-request-card__header";
+    
+    const headerTop = document.createElement("div");
+    headerTop.className = "admin-request-card__header-top";
     
     const title = document.createElement("h3");
     title.className = "admin-request-card__title";
     title.textContent = r.itemName || "Item";
     
-    const pill = document.createElement("span");
-    pill.className = `admin-status-pill admin-status-pill--${r.status || 'new'}`;
-    pill.textContent = r.status || "new";
+    // Delete button
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "admin-request-card__delete";
+    deleteBtn.setAttribute("aria-label", `Delete request for ${r.itemName || "item"}`);
+    deleteBtn.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i>';
+    deleteBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleDeleteRequest(r);
+    });
     
-    header.appendChild(title);
-    header.appendChild(pill);
+    headerTop.appendChild(title);
+    headerTop.appendChild(deleteBtn);
+    
+    // Timestamp and status row
+    const headerMeta = document.createElement("div");
+    headerMeta.className = "admin-request-card__meta";
+    
+    // Timestamp
+    const dateStr = formatRequestDate(r.createdAt);
+    if (dateStr) {
+      const timestamp = document.createElement("time");
+      timestamp.className = "admin-request-card__timestamp";
+      timestamp.innerHTML = `<i class="fas fa-clock" aria-hidden="true"></i>${dateStr}`;
+      headerMeta.appendChild(timestamp);
+    }
+    
+    // Status button (clickable to cycle through states)
+    const statusBtn = document.createElement("button");
+    statusBtn.className = `admin-status-btn admin-status-btn--${currentStatus}`;
+    statusBtn.setAttribute("aria-label", `Status: ${STATUS_LABELS[currentStatus]}. Click to change status.`);
+    statusBtn.innerHTML = `
+      <span class="admin-status-btn__dot"></span>
+      <span class="admin-status-btn__text">${STATUS_LABELS[currentStatus]}</span>
+      <i class="fas fa-chevron-down admin-status-btn__icon" aria-hidden="true"></i>
+    `;
+    
+    // Create status dropdown
+    const statusDropdown = document.createElement("div");
+    statusDropdown.className = "admin-status-dropdown";
+    statusDropdown.hidden = true;
+    
+    STATUS_OPTIONS.forEach(status => {
+      const option = document.createElement("button");
+      option.className = `admin-status-dropdown__option admin-status-dropdown__option--${status}`;
+      if (status === currentStatus) {
+        option.classList.add('active');
+      }
+      option.innerHTML = `
+        <span class="admin-status-btn__dot"></span>
+        <span>${STATUS_LABELS[status]}</span>
+      `;
+      option.addEventListener("click", (e) => {
+        e.stopPropagation();
+        handleStatusChange(r, status);
+        statusDropdown.hidden = true;
+        statusBtn.setAttribute("aria-expanded", "false");
+      });
+      statusDropdown.appendChild(option);
+    });
+    
+    // Status button click handler
+    statusBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      // Close all other dropdowns first
+      document.querySelectorAll('.admin-status-dropdown').forEach(dd => {
+        if (dd !== statusDropdown) {
+          dd.hidden = true;
+        }
+      });
+      document.querySelectorAll('.admin-status-btn').forEach(btn => {
+        if (btn !== statusBtn) {
+          btn.setAttribute("aria-expanded", "false");
+        }
+      });
+      
+      const isOpen = !statusDropdown.hidden;
+      statusDropdown.hidden = isOpen;
+      statusBtn.setAttribute("aria-expanded", !isOpen);
+    });
+    
+    const statusWrapper = document.createElement("div");
+    statusWrapper.className = "admin-status-wrapper";
+    statusWrapper.appendChild(statusBtn);
+    statusWrapper.appendChild(statusDropdown);
+    headerMeta.appendChild(statusWrapper);
+    
+    header.appendChild(headerTop);
+    header.appendChild(headerMeta);
 
+    // Body section with contact details
     const body = document.createElement("div");
     body.className = "admin-request-card__body";
     
-    body.innerHTML = `
-      <div class="admin-request-card__row">
-        <span class="admin-request-card__label">Name</span>
-        <span class="admin-request-card__value">${escapeHtml(r.contactName) || "N/A"}</span>
-      </div>
-      <div class="admin-request-card__row">
-        <span class="admin-request-card__label">Contact</span>
-        <span class="admin-request-card__value">${escapeHtml(r.contactInfo) || "N/A"}</span>
-      </div>
-      ${r.note ? `
-      <div class="admin-request-card__row admin-request-card__row--note">
-        <span class="admin-request-card__label">Note</span>
-        <span class="admin-request-card__value">${escapeHtml(r.note)}</span>
-      </div>
-      ` : ''}
-      <div class="admin-request-card__row admin-request-card__row--muted">
-        <span class="admin-request-card__label">Email</span>
-        <span class="admin-request-card__value">${escapeHtml(r.userEmail) || "N/A"}</span>
-      </div>
+    // Contact info grid
+    const contactGrid = document.createElement("div");
+    contactGrid.className = "admin-request-card__grid";
+    
+    // Name field
+    const nameField = document.createElement("div");
+    nameField.className = "admin-request-card__field";
+    nameField.innerHTML = `
+      <span class="admin-request-card__label">Name</span>
+      <span class="admin-request-card__value">${escapeHtml(r.contactName) || "—"}</span>
     `;
+    contactGrid.appendChild(nameField);
+    
+    // Contact field
+    const contactField = document.createElement("div");
+    contactField.className = "admin-request-card__field";
+    contactField.innerHTML = `
+      <span class="admin-request-card__label">Contact</span>
+      <span class="admin-request-card__value">${escapeHtml(r.contactInfo) || "—"}</span>
+    `;
+    contactGrid.appendChild(contactField);
+    
+    // Email field
+    const emailField = document.createElement("div");
+    emailField.className = "admin-request-card__field admin-request-card__field--email";
+    const emailValue = escapeHtml(r.userEmail) || "—";
+    emailField.innerHTML = `
+      <span class="admin-request-card__label">Email</span>
+      <span class="admin-request-card__value">${emailValue !== "—" ? `<a href="mailto:${emailValue}">${emailValue}</a>` : emailValue}</span>
+    `;
+    contactGrid.appendChild(emailField);
+    
+    body.appendChild(contactGrid);
+    
+    // Note section (if exists)
+    if (r.note) {
+      const noteSection = document.createElement("div");
+      noteSection.className = "admin-request-card__note";
+      noteSection.innerHTML = `
+        <span class="admin-request-card__label">Note</span>
+        <p class="admin-request-card__note-text">${escapeHtml(r.note)}</p>
+      `;
+      body.appendChild(noteSection);
+    }
 
     card.appendChild(header);
     card.appendChild(body);
     requestsList.appendChild(card);
   });
+  
+  // Close dropdown when clicking outside
+  document.addEventListener("click", closeAllStatusDropdowns);
+}
+
+function closeAllStatusDropdowns() {
+  document.querySelectorAll('.admin-status-dropdown').forEach(dd => {
+    dd.hidden = true;
+  });
+  document.querySelectorAll('.admin-status-btn').forEach(btn => {
+    btn.setAttribute("aria-expanded", "false");
+  });
+}
+
+async function handleStatusChange(request, newStatus) {
+  try {
+    await updateDoc(doc(db, "requests", request.id), { status: newStatus });
+    // Update local state
+    const requestIndex = requests.findIndex(r => r.id === request.id);
+    if (requestIndex !== -1) {
+      requests[requestIndex].status = newStatus;
+    }
+    renderRequests();
+  } catch (err) {
+    console.error("Failed to update status", err);
+    alert("Error updating status. Please try again.");
+  }
+}
+
+async function handleDeleteRequest(request) {
+  const itemName = request.itemName || "this item";
+  const contactName = request.contactName || "Unknown";
+  const confirmed = confirm(`Are you sure you want to delete the request for "${itemName}" from ${contactName}?`);
+  
+  if (!confirmed) {
+    return;
+  }
+  
+  try {
+    await deleteDoc(doc(db, "requests", request.id));
+    await loadRequests();
+  } catch (err) {
+    console.error("Failed to delete request", err);
+    alert("Error deleting request. Please try again.");
+  }
 }
 
 function escapeHtml(str) {

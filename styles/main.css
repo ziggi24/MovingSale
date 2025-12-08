@@ -381,6 +381,31 @@ a {
     visibility: visible;
 }
 
+.mobile-menu-close {
+    position: absolute;
+    top: var(--space-lg);
+    right: var(--space-lg);
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    color: var(--color-text);
+    font-size: 1.25rem;
+    transition: all var(--transition-fast);
+    z-index: 10;
+}
+
+.mobile-menu-close:hover {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-bg);
+    transform: scale(1.1);
+}
+
 .mobile-menu-content {
     display: flex;
     flex-direction: column;
@@ -418,28 +443,32 @@ a {
 .mobile-menu-footer {
     margin-top: var(--space-3xl);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: var(--space-md);
+    align-items: stretch;
 }
 
 .theme-toggle-mobile {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-md);
+    justify-content: center;
+    width: 53px;
+    height: 53px;
+    padding: 0;
     background: var(--color-bg-elevated);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     color: var(--color-text);
-    font-size: 1rem;
-    font-weight: 500;
+    font-size: 1.25rem;
     transition: all var(--transition-fast);
+    flex-shrink: 0;
 }
 
 .theme-toggle-mobile:hover {
     background: var(--color-bg-hover);
 }
 
+/* Default: light mode shows moon icon */
 .theme-toggle-mobile .fa-sun {
     display: none;
 }
@@ -448,6 +477,16 @@ a {
     display: inline;
 }
 
+/* Light mode: show moon icon */
+[data-theme="light"] .theme-toggle-mobile .fa-sun {
+    display: none;
+}
+
+[data-theme="light"] .theme-toggle-mobile .fa-moon {
+    display: inline;
+}
+
+/* Dark mode: show sun icon */
 [data-theme="dark"] .theme-toggle-mobile .fa-sun {
     display: inline;
 }
@@ -456,14 +495,10 @@ a {
     display: none;
 }
 
-[data-theme="dark"] .theme-toggle-mobile span {
-    content: "Light Mode";
-}
-
 .auth-btn-mobile {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: var(--space-md);
     padding: var(--space-md) var(--space-lg);
     background: var(--color-accent);
@@ -472,6 +507,7 @@ a {
     font-size: 1rem;
     font-weight: 600;
     transition: all var(--transition-fast);
+    flex: 1;
 }
 
 .auth-btn-mobile:hover {
@@ -1026,6 +1062,18 @@ a {
     transition: transform var(--transition-slow);
 }
 
+/* Hide scrollbar on larger screens while keeping scroll functionality */
+@media (min-width: 768px) {
+    .modal {
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE and Edge */
+    }
+    
+    .modal::-webkit-scrollbar {
+        display: none; /* Chrome, Safari, Opera */
+    }
+}
+
 .modal-overlay.open .modal {
     transform: translateY(0) scale(1);
 }
@@ -1436,6 +1484,66 @@ a {
 .request-section {
     padding-top: var(--space-lg);
     border-top: 1px solid var(--color-border);
+}
+
+/* Request Toggle Button */
+.request-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-md) var(--space-lg);
+    background: var(--color-accent-subtle);
+    color: var(--color-accent);
+    border: 2px solid var(--color-accent);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.request-toggle-btn:hover {
+    background: var(--color-accent);
+    color: var(--color-bg);
+}
+
+.request-toggle-btn.expanded {
+    background: var(--color-accent);
+    color: var(--color-bg);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    margin-bottom: 0;
+}
+
+.request-toggle-btn i {
+    font-size: 1rem;
+    transition: transform var(--transition-fast);
+}
+
+/* Request Content (expandable) */
+.request-content {
+    padding: var(--space-lg);
+    background: var(--color-bg-hover);
+    border: 2px solid var(--color-accent);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    animation: slideDown 0.2s ease-out;
+}
+
+.request-content[hidden] {
+    display: none;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .request-login {
@@ -2016,31 +2124,308 @@ a {
     overflow-y: auto;
 }
 
-/* Request Card */
+/* Request Card - Elevated Design */
 .admin-request-card {
-    background: var(--color-bg);
+    background: var(--color-bg-card);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     overflow: hidden;
+    transition: all var(--transition-base);
+    box-shadow: 0 2px 8px var(--color-shadow);
 }
 
+.admin-request-card:hover {
+    box-shadow: 0 8px 24px var(--color-shadow);
+    border-color: var(--color-border);
+}
+
+/* Card Header */
 .admin-request-card__header {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-md);
-    background: var(--color-bg-elevated);
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    background: linear-gradient(to bottom, var(--color-bg-elevated), var(--color-bg-card));
     border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.admin-request-card__header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
 }
 
 .admin-request-card__title {
     font-family: var(--font-display);
-    font-size: 1.1rem;
+    font-size: 1.25rem;
     font-weight: 600;
     color: var(--color-text);
     margin: 0;
+    line-height: 1.3;
+    flex: 1;
 }
 
+.admin-request-card__delete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-subtle);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+    padding: 0;
+    opacity: 0.6;
+}
+
+.admin-request-card:hover .admin-request-card__delete {
+    opacity: 1;
+}
+
+.admin-request-card__delete:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.admin-request-card__delete:active {
+    transform: scale(0.95);
+}
+
+/* Header Meta (timestamp + status) */
+.admin-request-card__meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.admin-request-card__timestamp {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+.admin-request-card__timestamp i {
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+/* Status Button & Dropdown */
+.admin-status-wrapper {
+    position: relative;
+}
+
+.admin-status-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--color-tag-bg);
+    border: 1px solid transparent;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.admin-status-btn:hover {
+    border-color: currentColor;
+    transform: translateY(-1px);
+}
+
+.admin-status-btn:focus {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.admin-status-btn__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+
+.admin-status-btn__text {
+    white-space: nowrap;
+}
+
+.admin-status-btn__icon {
+    font-size: 0.6rem;
+    margin-left: var(--space-xs);
+    transition: transform var(--transition-fast);
+}
+
+.admin-status-btn[aria-expanded="true"] .admin-status-btn__icon {
+    transform: rotate(180deg);
+}
+
+/* Status Colors */
+.admin-status-btn--new {
+    background: rgba(74, 222, 128, 0.15);
+    color: #4ade80;
+}
+
+.admin-status-btn--contacted {
+    background: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+}
+
+.admin-status-btn--pending {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+}
+
+.admin-status-btn--sold {
+    background: rgba(96, 165, 250, 0.15);
+    color: #60a5fa;
+}
+
+.admin-status-btn--declined {
+    background: rgba(156, 163, 175, 0.15);
+    color: #9ca3af;
+}
+
+/* Status Dropdown */
+.admin-status-dropdown {
+    position: absolute;
+    top: calc(100% + var(--space-xs));
+    right: 0;
+    min-width: 140px;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 30px var(--color-shadow);
+    z-index: 100;
+    overflow: hidden;
+    animation: dropdownFadeIn 0.15s ease-out;
+}
+
+@keyframes dropdownFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.admin-status-dropdown[hidden] {
+    display: none;
+}
+
+.admin-status-dropdown__option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: none;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.admin-status-dropdown__option:hover {
+    background: var(--color-bg-hover);
+}
+
+.admin-status-dropdown__option.active {
+    background: var(--color-accent-subtle);
+}
+
+.admin-status-dropdown__option--new { color: #4ade80; }
+.admin-status-dropdown__option--contacted { color: #a855f7; }
+.admin-status-dropdown__option--pending { color: #fbbf24; }
+.admin-status-dropdown__option--sold { color: #60a5fa; }
+.admin-status-dropdown__option--declined { color: #9ca3af; }
+
+/* Card Body */
+.admin-request-card__body {
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+/* Contact Grid */
+.admin-request-card__grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+}
+
+.admin-request-card__field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.admin-request-card__label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--color-text-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.admin-request-card__value {
+    font-size: 0.95rem;
+    color: var(--color-text);
+    word-break: break-word;
+    line-height: 1.4;
+}
+
+.admin-request-card__value a {
+    color: var(--color-accent);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+.admin-request-card__value a:hover {
+    color: var(--color-accent-hover);
+    text-decoration: underline;
+}
+
+/* Note Section */
+.admin-request-card__note {
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--color-border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.admin-request-card__note-text {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    line-height: 1.6;
+    font-style: italic;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg-hover);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--color-accent);
+}
+
+/* Legacy status pill (keep for backward compat) */
 .admin-status-pill {
     display: inline-block;
     padding: var(--space-xs) var(--space-sm);
@@ -2066,40 +2451,6 @@ a {
 .admin-status-pill--completed {
     background: rgba(96, 165, 250, 0.15);
     color: #60a5fa;
-}
-
-.admin-request-card__body {
-    padding: var(--space-md);
-}
-
-.admin-request-card__row {
-    display: flex;
-    gap: var(--space-md);
-    padding: var(--space-xs) 0;
-}
-
-.admin-request-card__row--note {
-    flex-direction: column;
-    gap: var(--space-xs);
-}
-
-.admin-request-card__row--muted {
-    opacity: 0.6;
-    font-size: 0.85rem;
-}
-
-.admin-request-card__label {
-    font-weight: 600;
-    color: var(--color-text-muted);
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    min-width: 60px;
-}
-
-.admin-request-card__value {
-    color: var(--color-text);
-    word-break: break-word;
 }
 
 /* Loading & Empty States */
@@ -2540,6 +2891,36 @@ a {
     .admin-requests-list {
         max-height: 600px;
     }
+    
+    /* Request Card Responsive - Tablet */
+    .admin-request-card__grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-md);
+    }
+    
+    .admin-request-card__field--email {
+        grid-column: span 2;
+    }
+    
+    .admin-request-card__title {
+        font-size: 1.35rem;
+    }
+    
+    .admin-request-card__meta {
+        flex-wrap: nowrap;
+    }
+}
+
+/* Small tablets - 2 column grid for request fields */
+@media (min-width: 480px) and (max-width: 767px) {
+    .admin-request-card__grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-sm);
+    }
+    
+    .admin-request-card__field--email {
+        grid-column: span 2;
+    }
 }
 
 /* Desktop - side by side panels */
@@ -2564,6 +2945,15 @@ a {
     
     .admin-requests-list {
         max-height: calc(100vh - 300px);
+    }
+    
+    /* Request Card - 3 column grid on desktop */
+    .admin-request-card__grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .admin-request-card__field--email {
+        grid-column: span 1;
     }
 }
 
