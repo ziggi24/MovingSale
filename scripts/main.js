@@ -134,10 +134,285 @@ function closeMobileMenu() {
 }
 
 // =====================================================
+// HERO GLOBE
+// =====================================================
+function initHeroGlobe() {
+  const globeContainer = document.getElementById('hero-globe');
+  if (!globeContainer || typeof Globe === 'undefined') return;
+
+  // Denver, CO coordinates
+  const denver = { lat: 39.7392, lng: -104.9903, name: 'Denver' };
+  // Berlin, Germany coordinates
+  const berlin = { lat: 52.5200, lng: 13.4050, name: 'Berlin' };
+
+  // Get theme-based colors
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  
+  // Colors matching the site design
+  const colors = {
+    globe: isDark ? '#1a1a1a' : '#e8e5e0',
+    land: isDark ? '#2d2520' : '#d4cfc5',
+    arc: isDark ? '#d4a574' : '#8b6b4a',
+    arcDash: isDark ? '#e5b88a' : '#725840',
+    atmosphere: isDark ? 'rgba(212, 165, 116, 0.15)' : 'rgba(139, 107, 74, 0.1)',
+    point: isDark ? '#d4a574' : '#8b6b4a',
+  };
+
+  const globe = Globe()
+    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
+    .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+    .backgroundColor('rgba(0,0,0,0)')
+    .showAtmosphere(true)
+    .atmosphereColor(colors.arc)
+    .atmosphereAltitude(0.15)
+    // Arcs: solid base arc + comet-tail gradient pulse (bright front, fading tail)
+    .arcsData([
+      // Solid base arc (very subtle)
+      {
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${isDark ? '212, 165, 116' : '139, 107, 74'}, 0.25)`,
+        stroke: 0.25,
+        dashLength: 1,
+        dashGap: 0,
+        animateTime: 0,
+        altitude: 0.45
+      },
+      // Comet tail layers - longer = further back in tail, shorter = front
+      // Tail end (longest, most transparent)
+      {
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${isDark ? '212, 165, 116' : '139, 107, 74'}, 0.03)`,
+        stroke: 3.5,
+        dashLength: 0.28,
+        dashGap: 0.72,
+        animateTime: 12000,
+        altitude: 0.451
+      },
+      {
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${isDark ? '215, 170, 120' : '145, 112, 78'}, 0.05)`,
+        stroke: 3.0,
+        dashLength: 0.25,
+        dashGap: 0.75,
+        animateTime: 12000,
+        altitude: 0.451
+      },
+      {
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${isDark ? '218, 175, 125' : '150, 117, 82'}, 0.07)`,
+        stroke: 2.6,
+        dashLength: 0.22,
+        dashGap: 0.78,
+        animateTime: 12000,
+        altitude: 0.451
+      },
+      {
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${isDark ? '222, 180, 130' : '155, 122, 86'}, 0.10)`,
+        stroke: 2.2,
+        dashLength: 0.19,
+        dashGap: 0.81,
+        animateTime: 12000,
+        altitude: 0.451
+      },
+      {
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${isDark ? '226, 185, 138' : '160, 127, 90'}, 0.14)`,
+        stroke: 1.9,
+        dashLength: 0.16,
+        dashGap: 0.84,
+        animateTime: 12000,
+        altitude: 0.451
+      },
+      {
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${isDark ? '230, 190, 145' : '165, 132, 95'}, 0.19)`,
+        stroke: 1.6,
+        dashLength: 0.13,
+        dashGap: 0.87,
+        animateTime: 12000,
+        altitude: 0.451
+      },
+      {
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${isDark ? '235, 198, 155' : '172, 140, 102'}, 0.26)`,
+        stroke: 1.3,
+        dashLength: 0.10,
+        dashGap: 0.90,
+        animateTime: 12000,
+        altitude: 0.451
+      },
+      {
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${isDark ? '240, 208, 168' : '180, 150, 112'}, 0.38)`,
+        stroke: 1.0,
+        dashLength: 0.07,
+        dashGap: 0.93,
+        animateTime: 12000,
+        altitude: 0.451
+      },
+      {
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${isDark ? '248, 222, 188' : '190, 162, 125'}, 0.55)`,
+        stroke: 0.7,
+        dashLength: 0.05,
+        dashGap: 0.95,
+        animateTime: 12000,
+        altitude: 0.451
+      },
+      // Bright front (shortest, brightest)
+      {
+        startLat: denver.lat,
+        startLng: denver.lng,
+        endLat: berlin.lat,
+        endLng: berlin.lng,
+        color: `rgba(${isDark ? '255, 242, 220' : '210, 180, 145'}, 0.9)`,
+        stroke: 0.4,
+        dashLength: 0.03,
+        dashGap: 0.97,
+        animateTime: 12000,
+        altitude: 0.451
+      }
+    ])
+    .arcColor('color')
+    .arcDashLength('dashLength')
+    .arcDashGap('dashGap')
+    .arcDashAnimateTime('animateTime')
+    .arcStroke('stroke')
+    .arcAltitude('altitude')
+    // Point markers for cities (small glowing dots)
+    .pointsData([denver, berlin])
+    .pointColor(() => colors.point)
+    .pointAltitude(0.005)
+    .pointRadius(0.6)
+    .pointsMerge(true)
+    (globeContainer);
+
+  // Camera animation: start at Denver, travel along arc to view of both cities
+  const isMobile = window.innerWidth < 768;
+  const altitudeStart = isMobile ? 1.8 : 1.4;
+  const altitudeEnd = isMobile ? 2.8 : 2.2;
+  
+  // Start camera at Denver
+  globe.pointOfView({ lat: denver.lat, lng: denver.lng, altitude: altitudeStart }, 0);
+  
+  // After a brief pause, animate camera along the journey towards Berlin
+  setTimeout(() => {
+    // First move to mid-Atlantic view (showing the arc)
+    globe.pointOfView({ lat: 48, lng: -30, altitude: altitudeEnd }, 4000);
+  }, 1500);
+
+  // Subtle auto-rotation
+  globe.controls().autoRotate = true;
+  globe.controls().autoRotateSpeed = 0.3;
+  globe.controls().enableZoom = false;
+  globe.controls().enablePan = false;
+  globe.controls().enableRotate = false;
+
+  // Custom globe material for darker appearance
+  globe.onGlobeReady(() => {
+    const globeMaterial = globe.globeMaterial();
+    globeMaterial.bumpScale = 3;
+    
+    // Make globe darker
+    if (isDark) {
+      globeMaterial.color.setHex(0x1a1510);
+      globeMaterial.emissive.setHex(0x0a0805);
+      globeMaterial.emissiveIntensity = 0.1;
+    } else {
+      globeMaterial.color.setHex(0xe8e5e0);
+    }
+  });
+
+  // Update globe colors when theme changes
+  const themeObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.attributeName === 'data-theme') {
+        // Refresh globe with new colors
+        const newIsDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        const newColors = {
+          arc: newIsDark ? '#d4a574' : '#8b6b4a',
+          point: newIsDark ? '#d4a574' : '#8b6b4a',
+        };
+        
+        globe.arcColor(() => [newColors.arc, newColors.arc]);
+        globe.pointColor(() => newColors.point);
+        globe.atmosphereColor(newColors.arc);
+        
+        const globeMaterial = globe.globeMaterial();
+        if (newIsDark) {
+          globeMaterial.color.setHex(0x1a1510);
+          globeMaterial.emissive.setHex(0x0a0805);
+        } else {
+          globeMaterial.color.setHex(0xe8e5e0);
+          globeMaterial.emissive.setHex(0x000000);
+        }
+      }
+    });
+  });
+
+  themeObserver.observe(document.documentElement, { attributes: true });
+
+  // Handle window resize
+  const resizeGlobe = () => {
+    globe.width(globeContainer.offsetWidth);
+    globe.height(globeContainer.offsetHeight);
+  };
+
+  window.addEventListener('resize', resizeGlobe);
+  
+  // Pause animation when not visible for performance
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        globe.resumeAnimation();
+      } else {
+        globe.pauseAnimation();
+      }
+    });
+  }, { threshold: 0 });
+  
+  observer.observe(globeContainer);
+
+  return globe;
+}
+
+// =====================================================
 // INITIALIZATION
 // =====================================================
 async function init() {
   initTheme();
+  initHeroGlobe();
   bindGlobalEvents();
   watchAuth();
   await loadItems();
