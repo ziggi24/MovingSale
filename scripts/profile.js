@@ -35,6 +35,7 @@ const themeToggleMobile = document.getElementById("theme-toggle-mobile");
 // Mobile menu elements
 const hamburgerBtn = document.getElementById("hamburger-btn");
 const mobileMenu = document.getElementById("mobile-menu");
+const mobileMenuClose = document.getElementById("mobile-menu-close");
 
 let currentUser = null;
 let isAdmin = false;
@@ -136,6 +137,9 @@ function init() {
 
   // Hamburger menu
   hamburgerBtn?.addEventListener("click", toggleMobileMenu);
+
+  // Mobile menu close button
+  mobileMenuClose?.addEventListener("click", closeMobileMenu);
 
   // Close mobile menu on nav links
   mobileMenu?.querySelectorAll(".mobile-nav-link").forEach((link) => {
