@@ -638,13 +638,72 @@ function applyFiltersAndSort() {
   }
 }
 
+function getPriceSortValue(price) {
+  if (price === null || price === undefined) {
+    return Infinity; // Put null/undefined prices at the end
+  }
+  
+  // If price is 0 (number), return 0
+  if (price === 0) {
+    return 0;
+  }
+  
+  // If price is a number, return it
+  if (typeof price === "number") {
+    return price;
+  }
+  
+  // If price is a string, try to extract a numeric value
+  if (typeof price === "string") {
+    const trimmed = price.trim();
+    
+    // Check if it's a single number
+    const numberMatch = trimmed.match(/^\d+$/);
+    if (numberMatch) {
+      return parseInt(numberMatch[0], 10);
+    }
+    
+    // Check if it's a range (extract first number)
+    const rangeMatch = trimmed.match(/^(\d+)\s*-\s*\d+$/);
+    if (rangeMatch) {
+      return parseInt(rangeMatch[1], 10);
+    }
+    
+    // For custom strings, return a large number to sort them after numeric prices
+    // Or we could sort alphabetically, but numeric sorting is more useful
+    return Infinity;
+  }
+  
+  return Infinity;
+}
+
 function sortItems() {
   switch (currentSort) {
     case "lowest":
-      filteredItems.sort((a, b) => (a.price || 0) - (b.price || 0));
+      filteredItems.sort((a, b) => {
+        const aVal = getPriceSortValue(a.price);
+        const bVal = getPriceSortValue(b.price);
+        if (aVal === bVal && aVal === Infinity) {
+          // Both are custom strings, sort alphabetically by price string
+          const aStr = String(a.price || "");
+          const bStr = String(b.price || "");
+          return aStr.localeCompare(bStr);
+        }
+        return aVal - bVal;
+      });
       break;
     case "highest":
-      filteredItems.sort((a, b) => (b.price || 0) - (a.price || 0));
+      filteredItems.sort((a, b) => {
+        const aVal = getPriceSortValue(a.price);
+        const bVal = getPriceSortValue(b.price);
+        if (aVal === bVal && aVal === Infinity) {
+          // Both are custom strings, sort alphabetically by price string
+          const aStr = String(a.price || "");
+          const bStr = String(b.price || "");
+          return bStr.localeCompare(aStr);
+        }
+        return bVal - aVal;
+      });
       break;
     case "alphabetical":
       filteredItems.sort((a, b) => {
@@ -768,7 +827,36 @@ function normalizeImagePath(imgPath) {
 
 function formatPrice(price) {
   if (price === null || price === undefined) return "Price negotiable";
-  return `$${price.toLocaleString()}`;
+  
+  // If price is 0 (number), display as "free"
+  if (price === 0) {
+    return "Free";
+  }
+  
+  // If price is a number (not 0), format with $ and OBO
+  if (typeof price === "number") {
+    return `$${price.toLocaleString()} OBO`;
+  }
+  
+  // If price is a string, check if it's a number or number range
+  if (typeof price === "string") {
+    const trimmed = price.trim();
+    
+    // Check if it's a single number or number range (e.g., "20-50", "100-429")
+    const numberPattern = /^\d+$/; // Single number
+    const rangePattern = /^\d+\s*-\s*\d+$/; // Number range like "20-50" or "20 - 50"
+    
+    if (numberPattern.test(trimmed) || rangePattern.test(trimmed)) {
+      // It's a number or range, format with $ and OBO
+      return `$${trimmed} OBO`;
+    }
+    
+    // Otherwise, return as-is (custom text)
+    return trimmed;
+  }
+  
+  // Fallback for any other type
+  return String(price);
 }
 
 // =====================================================

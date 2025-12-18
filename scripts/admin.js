@@ -687,7 +687,7 @@ function buildItemPayload(formData) {
     .split(",")
     .map((t) => t.trim())
     .filter(Boolean);
-  const priceValue = formData.get("price");
+  const priceValue = (formData.get("price") || "").trim();
   
   // Parse images array from JSON string
   let images = [];
@@ -700,9 +700,21 @@ function buildItemPayload(formData) {
     }
   }
   
+  // Determine how to store price
+  let price = null;
+  if (priceValue) {
+    // If exactly "0", store as number 0 (will display as "free")
+    if (priceValue === "0") {
+      price = 0;
+    } else {
+      // Store as string (will be formatted based on content)
+      price = priceValue;
+    }
+  }
+  
   return {
     name: formData.get("name") || "",
-    price: priceValue ? Number(priceValue) : null,
+    price: price,
     images: images, // Store as array
     img: images.length > 0 ? images[0] : "", // Keep img for backward compatibility
     tags,
@@ -762,6 +774,40 @@ async function loadItems() {
   }
 }
 
+function formatPrice(price) {
+  if (price === null || price === undefined) return "No price";
+  
+  // If price is 0 (number), display as "free"
+  if (price === 0) {
+    return "Free";
+  }
+  
+  // If price is a number (not 0), format with $ and OBO
+  if (typeof price === "number") {
+    return `$${price.toLocaleString()} OBO`;
+  }
+  
+  // If price is a string, check if it's a number or number range
+  if (typeof price === "string") {
+    const trimmed = price.trim();
+    
+    // Check if it's a single number or number range (e.g., "20-50", "100-429")
+    const numberPattern = /^\d+$/; // Single number
+    const rangePattern = /^\d+\s*-\s*\d+$/; // Number range like "20-50" or "20 - 50"
+    
+    if (numberPattern.test(trimmed) || rangePattern.test(trimmed)) {
+      // It's a number or range, format with $ and OBO
+      return `$${trimmed} OBO`;
+    }
+    
+    // Otherwise, return as-is (custom text)
+    return trimmed;
+  }
+  
+  // Fallback for any other type
+  return String(price);
+}
+
 function renderItems() {
   itemsList.innerHTML = "";
   
@@ -788,7 +834,7 @@ function renderItems() {
     
     const meta = document.createElement("span");
     meta.className = "admin-item-row__meta";
-    const price = item.price !== null ? `$${item.price}` : "No price";
+    const price = formatPrice(item.price);
     const tagCount = item.tags?.length || 0;
     meta.textContent = `${price} • ${tagCount} tag${tagCount !== 1 ? 's' : ''}`;
     
