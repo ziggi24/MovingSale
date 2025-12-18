@@ -195,7 +195,10 @@
         
         <label class="admin-field">
           <span class="admin-field__label">Tags</span>
-          <input type="text" name="tags" placeholder="furniture, electronics, kitchen">
+          <div class="tags-autocomplete-wrapper">
+            <input type="text" name="tags" id="tags-input" placeholder="furniture, electronics, kitchen" autocomplete="off">
+            <div class="tags-autocomplete-dropdown" id="tags-autocomplete" hidden></div>
+          </div>
         </label>
         
         <label class="admin-field">

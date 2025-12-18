@@ -55,6 +55,7 @@ const modalSubmitText = document.getElementById("modal-submit-text");
 const modalStatus = document.getElementById("modal-status");
 const itemIdInput = document.getElementById("item-id");
 const imagesUrlInput = document.getElementById("images-url-input");
+const tagsInput = document.getElementById("tags-input");
 
 // Image upload elements
 const imageUploadArea = document.getElementById("image-upload-area");
@@ -85,6 +86,7 @@ let editingItem = null;
 let currentImages = []; // Array of image URLs
 let isUploading = false;
 let uploadingImageIndex = -1; // Track which image is currently uploading
+let allExistingTags = []; // Array of all existing tags for autocomplete
 
 // =====================================================
 // CLOUDINARY UPLOAD
@@ -487,6 +489,13 @@ function openModal(item = null) {
   itemModal.classList.add("open");
   document.body.style.overflow = "hidden";
   
+  // Initialize autocomplete if not already done (in case modal opens before items load)
+  if (!tagsAutocompleteInitialized) {
+    setTimeout(() => {
+      initTagsAutocomplete();
+    }, 100);
+  }
+  
   // Focus first input
   setTimeout(() => itemForm.name.focus(), 100);
 }
@@ -701,6 +710,33 @@ function buildItemPayload(formData) {
 // =====================================================
 // ITEMS
 // =====================================================
+// Helper function to normalize tags (lowercase for comparison)
+function normalizeTag(tag) {
+  return tag.toLowerCase().trim();
+}
+
+// Helper function to format tags for display (title case)
+function formatTagForDisplay(tag) {
+  return tag
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+// Extract all unique tags from items
+function extractAllTags(items) {
+  const tagSet = new Set();
+  items.forEach((item) => {
+    if (item.tags && Array.isArray(item.tags)) {
+      item.tags.forEach((tag) => {
+        const normalized = normalizeTag(tag);
+        tagSet.add(normalized);
+      });
+    }
+  });
+  return Array.from(tagSet).sort();
+}
+
 async function loadItems() {
   itemsLoading.hidden = false;
   itemsEmpty.hidden = true;
@@ -709,6 +745,10 @@ async function loadItems() {
     const q = query(collection(db, "items"), orderBy("name"));
     const snap = await getDocs(q);
     items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    
+    // Extract all existing tags for autocomplete
+    allExistingTags = extractAllTags(items);
+    
     renderItems();
   } catch (err) {
     console.error("Failed to load items", err);
@@ -1072,6 +1112,234 @@ function escapeHtml(str) {
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
+}
+
+// =====================================================
+// TAGS AUTOCOMPLETE
+// =====================================================
+let tagsAutocompleteInitialized = false;
+
+function initTagsAutocomplete() {
+  const tagsInput = document.getElementById("tags-input");
+  const autocompleteDropdown = document.getElementById("tags-autocomplete");
+  
+  if (!tagsInput || !autocompleteDropdown) {
+    // Elements not found yet, will try again when modal opens
+    return;
+  }
+  
+  // Prevent duplicate initialization
+  if (tagsAutocompleteInitialized) {
+    return;
+  }
+  
+  tagsAutocompleteInitialized = true;
+  
+  let selectedIndex = -1;
+  let currentSuggestions = [];
+  
+  // Get the current word being typed (last word after comma)
+  function getCurrentWord(value) {
+    const parts = value.split(",");
+    return parts[parts.length - 1].trim();
+  }
+  
+  // Get all tags already entered (before the current word)
+  function getEnteredTags(value) {
+    const parts = value.split(",");
+    parts.pop(); // Remove the current word
+    return parts.map(t => t.trim()).filter(Boolean);
+  }
+  
+  // Filter suggestions based on current word
+  function filterSuggestions(word) {
+    if (!word) {
+      // Show all existing tags when no input
+      return allExistingTags;
+    }
+    
+    const normalizedWord = normalizeTag(word);
+    return allExistingTags
+      .filter(tag => normalizeTag(tag).includes(normalizedWord))
+      .slice(0, 20); // Show more results when filtering
+  }
+  
+  // Render suggestions dropdown
+  function renderSuggestions(suggestions, currentWord) {
+    if (suggestions.length === 0) {
+      autocompleteDropdown.hidden = true;
+      return;
+    }
+    
+    autocompleteDropdown.innerHTML = "";
+    selectedIndex = -1;
+    
+    suggestions.forEach((tag, index) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "tags-autocomplete-option";
+      option.textContent = formatTagForDisplay(tag);
+      option.dataset.tag = tag;
+      
+      option.addEventListener("click", () => {
+        selectTag(tag, currentWord);
+      });
+      
+      autocompleteDropdown.appendChild(option);
+    });
+    
+    autocompleteDropdown.hidden = false;
+    currentSuggestions = suggestions;
+  }
+  
+  // Select a tag and update the input
+  function selectTag(tag, currentWord) {
+    const enteredTags = getEnteredTags(tagsInput.value);
+    const formattedTag = formatTagForDisplay(tag);
+    
+    // Capitalize all previously entered tags
+    const capitalizedEnteredTags = enteredTags.map(t => formatTagForDisplay(t));
+    capitalizedEnteredTags.push(formattedTag);
+    
+    tagsInput.value = capitalizedEnteredTags.join(", ") + ", ";
+    
+    autocompleteDropdown.hidden = true;
+    tagsInput.focus();
+    
+    // Move cursor to end
+    tagsInput.setSelectionRange(tagsInput.value.length, tagsInput.value.length);
+    
+    // Show all suggestions for next tag
+    setTimeout(() => {
+      const suggestions = filterSuggestions("");
+      renderSuggestions(suggestions, "");
+    }, 10);
+  }
+  
+  // Handle input
+  tagsInput.addEventListener("input", (e) => {
+    let value = e.target.value;
+    
+    // Auto-capitalize completed tags (everything before the last comma)
+    if (value.includes(",")) {
+      const parts = value.split(",");
+      if (parts.length > 1) {
+        const completedParts = parts.slice(0, -1);
+        const lastPart = parts[parts.length - 1];
+        
+        // Capitalize all completed tags
+        const capitalized = completedParts.map(part => {
+          const trimmed = part.trim();
+          return trimmed ? formatTagForDisplay(trimmed) : "";
+        }).filter(Boolean);
+        
+        // Reconstruct value with capitalized tags
+        const newValue = capitalized.join(", ") + (lastPart ? "," + lastPart : ",");
+        
+        if (newValue !== value) {
+          const cursorPos = e.target.selectionStart;
+          const cursorOffset = newValue.length - value.length;
+          e.target.value = newValue;
+          // Adjust cursor position
+          const newCursorPos = Math.min(cursorPos + cursorOffset, newValue.length);
+          e.target.setSelectionRange(newCursorPos, newCursorPos);
+          value = newValue;
+        }
+      }
+    }
+    
+    const currentWord = getCurrentWord(value);
+    const suggestions = filterSuggestions(currentWord);
+    
+    renderSuggestions(suggestions, currentWord);
+  });
+  
+  // Show dropdown on focus - show all tags
+  tagsInput.addEventListener("focus", () => {
+    const currentWord = getCurrentWord(tagsInput.value);
+    const suggestions = filterSuggestions(currentWord);
+    renderSuggestions(suggestions, currentWord);
+  });
+  
+  // Handle keyboard navigation
+  tagsInput.addEventListener("keydown", (e) => {
+    if (autocompleteDropdown.hidden) return;
+    
+    const options = autocompleteDropdown.querySelectorAll(".tags-autocomplete-option");
+    
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        selectedIndex = Math.min(selectedIndex + 1, options.length - 1);
+        updateSelection(options);
+        break;
+        
+      case "ArrowUp":
+        e.preventDefault();
+        selectedIndex = Math.max(selectedIndex - 1, -1);
+        updateSelection(options);
+        break;
+        
+      case "Enter":
+        e.preventDefault();
+        if (selectedIndex >= 0 && options[selectedIndex]) {
+          const tag = options[selectedIndex].dataset.tag;
+          selectTag(tag, "");
+        } else if (options.length > 0) {
+          // Select first option if none selected
+          const tag = options[0].dataset.tag;
+          selectTag(tag, "");
+        } else {
+          // If no suggestions, just add comma and space if current word exists
+          const currentWord = getCurrentWord(tagsInput.value);
+          if (currentWord) {
+            const enteredTags = getEnteredTags(tagsInput.value);
+            enteredTags.push(formatTagForDisplay(currentWord));
+            tagsInput.value = enteredTags.join(", ") + ", ";
+            tagsInput.setSelectionRange(tagsInput.value.length, tagsInput.value.length);
+            // Show all suggestions
+            const suggestions = filterSuggestions("");
+            renderSuggestions(suggestions, "");
+          }
+        }
+        break;
+        
+      case "Escape":
+        autocompleteDropdown.hidden = true;
+        break;
+        
+      case "Tab":
+        // Allow tab to work normally, but close dropdown
+        autocompleteDropdown.hidden = true;
+        break;
+    }
+  });
+  
+  // Update visual selection
+  function updateSelection(options) {
+    options.forEach((opt, index) => {
+      opt.classList.toggle("selected", index === selectedIndex);
+      if (index === selectedIndex) {
+        opt.scrollIntoView({ block: "nearest" });
+      }
+    });
+  }
+  
+  // Close dropdown when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!tagsInput.contains(e.target) && !autocompleteDropdown.contains(e.target)) {
+      autocompleteDropdown.hidden = true;
+    }
+  });
+  
+  // Close dropdown on blur (with delay to allow clicks)
+  tagsInput.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (document.activeElement !== tagsInput && !autocompleteDropdown.contains(document.activeElement)) {
+        autocompleteDropdown.hidden = true;
+      }
+    }, 200);
+  });
 }
 
 // =====================================================

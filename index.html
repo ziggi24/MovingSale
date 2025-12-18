@@ -114,8 +114,14 @@
             <div class="controls-container">
                 <div class="filters">
                     <h2 class="filters-label">Filter by:</h2>
-                    <div class="tag-filters" role="group" aria-label="Tag filters">
-                        <!-- Tag buttons will be dynamically generated -->
+                    <div class="tag-filter-dropdown-wrapper">
+                        <button class="tag-filter-dropdown-btn" id="tag-filter-dropdown-btn" aria-label="Filter by tags" aria-expanded="false" aria-haspopup="true">
+                            <span class="tag-filter-dropdown-text" id="tag-filter-dropdown-text">All Tags</span>
+                            <i class="fas fa-chevron-down tag-filter-dropdown-icon select-icon" aria-hidden="true"></i>
+                        </button>
+                        <div class="tag-filter-dropdown-menu" id="tag-filter-dropdown-menu" role="menu" aria-label="Tag filters" hidden>
+                            <!-- Tag checkboxes will be dynamically generated -->
+                        </div>
                     </div>
                 </div>
                 <div class="sort">

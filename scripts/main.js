@@ -28,7 +28,9 @@ let isAdmin = false;
 // DOM ELEMENTS
 // =====================================================
 const productsGrid = document.getElementById("products-grid");
-const tagFiltersContainer = document.querySelector(".tag-filters");
+const tagFiltersContainer = document.getElementById("tag-filter-dropdown-menu");
+const tagFilterDropdownBtn = document.getElementById("tag-filter-dropdown-btn");
+const tagFilterDropdownText = document.getElementById("tag-filter-dropdown-text");
 const sortSelect = document.getElementById("sort-select");
 const noResults = document.getElementById("no-results");
 const clearFiltersBtn = document.getElementById("clear-filters");
@@ -479,62 +481,148 @@ async function loadItems() {
   }
 }
 
+// Helper function to normalize tags (lowercase for comparison)
+function normalizeTag(tag) {
+  return tag.toLowerCase().trim();
+}
+
+// Helper function to format tags for display (title case)
+function formatTagForDisplay(tag) {
+  return tag
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function extractUniqueTags(items) {
-  const tagSet = new Set();
+  const tagMap = new Map(); // Use Map to store normalized -> display format
   items.forEach((item) => {
     if (item.tags && Array.isArray(item.tags)) {
-      item.tags.forEach((tag) => tagSet.add(tag));
+      item.tags.forEach((tag) => {
+        const normalized = normalizeTag(tag);
+        // Store the first occurrence's display format, or use title case
+        if (!tagMap.has(normalized)) {
+          tagMap.set(normalized, formatTagForDisplay(tag));
+        }
+      });
     }
   });
-  return Array.from(tagSet).sort();
+  // Return array of normalized tags (for Set operations) and display format
+  return Array.from(tagMap.entries()).sort((a, b) => 
+    a[1].localeCompare(b[1]) // Sort by display name
+  );
 }
 
 // =====================================================
 // FILTERS & SORTING
 // =====================================================
+let allAvailableTags = [];
+
 function renderTagFilters(tags) {
+  allAvailableTags = tags;
+  if (!tagFiltersContainer) return;
+  
   tagFiltersContainer.innerHTML = "";
-
-  tags.forEach((tag) => {
-    const button = document.createElement("button");
-    button.className = "tag-filter-btn";
-    button.textContent = tag;
-    button.setAttribute("aria-pressed", "false");
-    button.setAttribute("data-tag", tag);
-    button.addEventListener("click", () => toggleTagFilter(tag, button));
-    tagFiltersContainer.appendChild(button);
-  });
-}
-
-function toggleTagFilter(tag, button) {
-  if (activeTags.has(tag)) {
-    activeTags.delete(tag);
-    button.classList.remove("active");
-    button.setAttribute("aria-pressed", "false");
-  } else {
-    activeTags.add(tag);
-    button.classList.add("active");
-    button.setAttribute("aria-pressed", "true");
+  
+  // Ensure dropdown is hidden initially
+  tagFiltersContainer.hidden = true;
+  if (tagFilterDropdownBtn) {
+    tagFilterDropdownBtn.setAttribute("aria-expanded", "false");
   }
+
+  // Initialize all tags as active by default
+  activeTags.clear();
+  tags.forEach(([normalizedTag]) => {
+    activeTags.add(normalizedTag);
+  });
+
+  tags.forEach(([normalizedTag, displayTag]) => {
+    const label = document.createElement("label");
+    label.className = "tag-filter-option";
+    label.setAttribute("role", "menuitemcheckbox");
+    label.setAttribute("aria-checked", "true");
+    
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "tag-filter-checkbox";
+    checkbox.checked = true;
+    checkbox.setAttribute("data-tag", normalizedTag);
+    checkbox.addEventListener("change", () => toggleTagFilter(normalizedTag, checkbox));
+    
+    const span = document.createElement("span");
+    span.className = "tag-filter-label";
+    span.textContent = displayTag;
+    
+    label.appendChild(checkbox);
+    label.appendChild(span);
+    tagFiltersContainer.appendChild(label);
+  });
+
+  updateFilterButtonText();
   applyFiltersAndSort();
 }
 
+function toggleTagFilter(tag, checkbox) {
+  if (checkbox.checked) {
+    activeTags.add(tag);
+  } else {
+    activeTags.delete(tag);
+  }
+  
+  const label = checkbox.closest(".tag-filter-option");
+  if (label) {
+    label.setAttribute("aria-checked", checkbox.checked ? "true" : "false");
+  }
+  
+  updateFilterButtonText();
+  applyFiltersAndSort();
+}
+
+function updateFilterButtonText() {
+  const totalTags = allAvailableTags.length;
+  const activeCount = activeTags.size;
+  
+  if (activeCount === 0) {
+    tagFilterDropdownText.textContent = "No Tags Selected";
+  } else if (activeCount === totalTags) {
+    tagFilterDropdownText.textContent = "All Tags";
+  } else {
+    tagFilterDropdownText.textContent = `${activeCount} of ${totalTags} Tags`;
+  }
+}
+
 function clearAllFilters() {
+  // Set all tags to active (default state)
   activeTags.clear();
-  document.querySelectorAll(".tag-filter-btn").forEach((btn) => {
-    btn.classList.remove("active");
-    btn.setAttribute("aria-pressed", "false");
+  allAvailableTags.forEach(([normalizedTag]) => {
+    activeTags.add(normalizedTag);
   });
+  
+  document.querySelectorAll(".tag-filter-checkbox").forEach((checkbox) => {
+    checkbox.checked = true;
+    const label = checkbox.closest(".tag-filter-option");
+    if (label) {
+      label.setAttribute("aria-checked", "true");
+    }
+  });
+  
+  updateFilterButtonText();
   applyFiltersAndSort();
 }
 
 function applyFiltersAndSort() {
-  if (activeTags.size === 0) {
+  // If all tags are active, show all items
+  // If no tags are active, show nothing
+  // Otherwise, filter by active tags
+  if (activeTags.size === allAvailableTags.length) {
     filteredItems = [...allItems];
+  } else if (activeTags.size === 0) {
+    filteredItems = [];
   } else {
     filteredItems = allItems.filter((item) => {
       if (!item.tags || !Array.isArray(item.tags)) return false;
-      return item.tags.some((tag) => activeTags.has(tag));
+      // Normalize item tags for case-insensitive comparison
+      return item.tags.some((tag) => activeTags.has(normalizeTag(tag)));
     });
   }
 
@@ -633,36 +721,18 @@ function createProductCard(item, index) {
   price.className = "product-price";
   price.textContent = formatPrice(item.price);
 
-  const tagsContainer = document.createElement("div");
-  tagsContainer.className = "product-tags";
-  if (item.tags && Array.isArray(item.tags)) {
-    item.tags.forEach((tag) => {
-      const tagElement = document.createElement("span");
-      tagElement.className = "product-tag";
-      tagElement.textContent = tag;
-      tagsContainer.appendChild(tagElement);
-    });
-  }
-
-  const descriptionPreview = document.createElement("p");
-  descriptionPreview.className = "product-description-preview";
-  descriptionPreview.textContent =
-    item.description || "No description available.";
-
-  const requestBtn = document.createElement("button");
-  requestBtn.type = "button";
-  requestBtn.className = "request-btn";
-  requestBtn.textContent = "Request Item";
-  requestBtn.addEventListener("click", (e) => {
+  const moreInfoBtn = document.createElement("button");
+  moreInfoBtn.type = "button";
+  moreInfoBtn.className = "more-info-btn";
+  moreInfoBtn.textContent = "More Info";
+  moreInfoBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     openModal(item);
   });
 
   info.appendChild(name);
   info.appendChild(price);
-  info.appendChild(tagsContainer);
-  info.appendChild(descriptionPreview);
-  info.appendChild(requestBtn);
+  info.appendChild(moreInfoBtn);
 
   card.appendChild(imageWrapper);
   card.appendChild(info);
@@ -995,7 +1065,7 @@ function openModal(item) {
     item.tags.forEach((tag) => {
       const tagElement = document.createElement("span");
       tagElement.className = "modal-tag";
-      tagElement.textContent = tag;
+      tagElement.textContent = formatTagForDisplay(tag);
       tagsContainer.appendChild(tagElement);
     });
   }
@@ -1186,6 +1256,29 @@ function setupEventListeners() {
   sortSelect?.addEventListener("change", (e) => {
     currentSort = e.target.value;
     applyFiltersAndSort();
+  });
+
+  clearFiltersBtn?.addEventListener("click", clearAllFilters);
+
+  // Tag filter dropdown toggle
+  tagFilterDropdownBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isExpanded = tagFilterDropdownBtn.getAttribute("aria-expanded") === "true";
+    const newExpandedState = !isExpanded;
+    tagFilterDropdownBtn.setAttribute("aria-expanded", newExpandedState.toString());
+    if (tagFiltersContainer) {
+      tagFiltersContainer.hidden = !newExpandedState;
+    }
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", (e) => {
+    if (tagFilterDropdownBtn && tagFiltersContainer) {
+      if (!tagFilterDropdownBtn.contains(e.target) && !tagFiltersContainer.contains(e.target)) {
+        tagFilterDropdownBtn.setAttribute("aria-expanded", "false");
+        tagFiltersContainer.hidden = true;
+      }
+    }
   });
 
   modalClose?.addEventListener("click", closeModal);
