@@ -16,7 +16,7 @@ import {
   checkIsAdmin,
 } from "./firebaseClient.js";
 
-import { prepareImageForUpload, formatBytes } from "./imageResizer.js";
+import { prepareImageForUpload, formatBytes, isMobileDevice, processImageForMobile } from "./imageResizer.js";
 import { isHeicFile, convertHeicToJpeg } from "./heicConverter.js";
 
 // =====================================================
@@ -229,17 +229,22 @@ async function handleImageFile(file) {
   uploadingImageIndex = imageIndex;
   showUploadingState();
   
+  // Detect if on mobile - use more aggressive compression
+  const onMobile = isMobileDevice();
+  const MAX_SIZE = onMobile ? 5 * 1024 * 1024 : 8 * 1024 * 1024; // 5MB for mobile, 8MB for desktop
+  
+  console.log(`[Admin] Processing image: ${file.name} (${formatBytes(file.size)}) - Mobile: ${onMobile}`);
+  
   try {
     let processedFile = file;
-    const MAX_SIZE = 8 * 1024 * 1024; // 8MB
     
-    // Step 1: Convert HEIC/HEIF files to JPEG first
+    // Step 1: Convert HEIC/HEIF files to JPEG first (common on iOS)
     if (isHeicFile(file)) {
       showImageStatus(`Converting HEIC image...`, "");
       console.log(`[Admin] Converting HEIC file: ${file.name} (${formatBytes(file.size)})`);
       
       try {
-        processedFile = await convertHeicToJpeg(file, { quality: 0.92, debug: true });
+        processedFile = await convertHeicToJpeg(file, { quality: 0.85, debug: true });
         console.log(`[Admin] HEIC converted: ${processedFile.name} (${formatBytes(processedFile.size)})`);
         showImageStatus(`Converted to JPEG (${formatBytes(processedFile.size)})`, "success");
       } catch (heicError) {
@@ -249,31 +254,57 @@ async function handleImageFile(file) {
       }
     }
     
-    // Step 2: Resize if image is over 8MB (after HEIC conversion if applicable)
-    let uploadFile = processedFile;
+    // Step 2: For mobile, ALWAYS process through canvas to ensure JPEG and proper compression
+    // For desktop, only process if over the size limit
+    let uploadFile;
     
-    if (processedFile.size > MAX_SIZE) {
-      showImageStatus(`Resizing large image (${formatBytes(processedFile.size)})...`, "");
+    if (onMobile) {
+      // Mobile: Always convert to JPEG and compress to under 5MB
+      showImageStatus(`Optimizing for upload (${formatBytes(processedFile.size)})...`, "");
       
-      const result = await prepareImageForUpload(processedFile, {
+      const result = await processImageForMobile(processedFile, {
         maxSizeBytes: MAX_SIZE,
-        quality: 0.92,
+        quality: 0.82, // Slightly more aggressive quality for mobile
         debug: true,
       });
       
-      if (result.wasResized) {
-        console.log(`[Admin] Image resized from ${formatBytes(result.originalSize)} to ${formatBytes(result.finalSize)}`);
-        showImageStatus(`Compressed to ${formatBytes(result.finalSize)}, uploading...`, "success");
-      }
+      console.log(`[Admin] Mobile optimization: ${formatBytes(result.originalSize)} → ${formatBytes(result.finalSize)}`);
+      showImageStatus(`Optimized to ${formatBytes(result.finalSize)}, uploading...`, "success");
       
-      // Create a new File object from the blob to maintain filename
-      uploadFile = new File([result.blob], processedFile.name, { 
-        type: result.blob.type || 'image/jpeg' 
+      // Create a new File object from the blob
+      const newFileName = processedFile.name.replace(/\.[^.]+$/, '.jpg');
+      uploadFile = new File([result.blob], newFileName, { 
+        type: 'image/jpeg' 
       });
+    } else {
+      // Desktop: Only compress if over the limit
+      if (processedFile.size > MAX_SIZE) {
+        showImageStatus(`Resizing large image (${formatBytes(processedFile.size)})...`, "");
+        
+        const result = await prepareImageForUpload(processedFile, {
+          maxSizeBytes: MAX_SIZE,
+          quality: 0.90,
+          debug: true,
+        });
+        
+        if (result.wasResized) {
+          console.log(`[Admin] Image resized from ${formatBytes(result.originalSize)} to ${formatBytes(result.finalSize)}`);
+          showImageStatus(`Compressed to ${formatBytes(result.finalSize)}, uploading...`, "success");
+        }
+        
+        // Create a new File object from the blob to maintain filename
+        uploadFile = new File([result.blob], processedFile.name, { 
+          type: result.blob.type || 'image/jpeg' 
+        });
+      } else {
+        uploadFile = processedFile;
+      }
     }
     
     // Step 3: Upload to Cloudinary
-    showImageStatus(`Uploading...`, "");
+    showImageStatus(`Uploading (${formatBytes(uploadFile.size)})...`, "");
+    console.log(`[Admin] Uploading: ${uploadFile.name} (${formatBytes(uploadFile.size)})`);
+    
     const imageUrl = await uploadToCloudinary(uploadFile);
     
     // Add to current images array

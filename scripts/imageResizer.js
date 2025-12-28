@@ -322,10 +322,162 @@ export function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+/**
+ * Check if user is on a mobile device
+ * @returns {boolean} - True if on mobile/tablet
+ */
+export function isMobileDevice() {
+  // Check for touch support and screen size
+  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const isSmallScreen = window.innerWidth <= 1024;
+  
+  // Check user agent for mobile indicators
+  const mobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  // iOS detection (more reliable)
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  
+  return mobileUA || isIOS || (hasTouch && isSmallScreen);
+}
+
+/**
+ * Force convert any image to JPEG and compress to target size
+ * This ALWAYS processes the image through canvas, ensuring consistent output
+ * 
+ * @param {File|Blob} file - The image file to convert
+ * @param {Object} config - Configuration options
+ * @returns {Promise<Blob>} - Converted and compressed JPEG blob
+ */
+export async function forceConvertToJpeg(file, config = {}) {
+  const settings = { 
+    ...DEFAULT_CONFIG, 
+    maxSizeBytes: 5 * 1024 * 1024, // Default to 5MB for mobile safety
+    ...config 
+  };
+  
+  if (settings.debug) {
+    console.log(`[ImageResizer] Force converting: ${file.name || 'blob'} (${formatBytes(file.size)})`);
+  }
+  
+  // Read file and load image
+  const dataUrl = await readFileAsDataURL(file);
+  const img = await loadImage(dataUrl);
+  
+  if (settings.debug) {
+    console.log(`[ImageResizer] Original dimensions: ${img.width}x${img.height}`);
+  }
+  
+  // Calculate initial dimensions (respect max dimension limits)
+  let { width, height } = calculateDimensions(
+    img.width, 
+    img.height, 
+    settings.maxWidth, 
+    settings.maxHeight
+  );
+  
+  // Start with configured quality
+  let quality = settings.quality;
+  let blob = null;
+  let attempts = 0;
+  const maxAttempts = 15; // More attempts for mobile
+  
+  // Iteratively find optimal settings
+  while (attempts < maxAttempts) {
+    attempts++;
+    
+    // Draw image to canvas at current dimensions
+    const canvas = drawToCanvas(img, width, height);
+    
+    // Convert to JPEG blob
+    blob = await canvasToBlob(canvas, 'image/jpeg', quality);
+    
+    if (settings.debug) {
+      console.log(`[ImageResizer] Attempt ${attempts}: ${width}x${height} @ quality ${quality.toFixed(2)} = ${formatBytes(blob.size)}`);
+    }
+    
+    // Check if we're under the limit
+    if (blob.size <= settings.maxSizeBytes) {
+      break;
+    }
+    
+    // Calculate how much we need to reduce
+    const sizeRatio = settings.maxSizeBytes / blob.size;
+    
+    // More aggressive reduction for mobile
+    if (quality > 0.4) {
+      // Reduce quality more aggressively
+      const qualityReduction = Math.max(0.08, (1 - sizeRatio) * 0.25);
+      quality = Math.max(0.4, quality - qualityReduction);
+    } else {
+      // Quality is already low, reduce dimensions more aggressively
+      const dimensionScale = Math.max(0.65, Math.sqrt(sizeRatio * 0.85));
+      width = Math.round(width * dimensionScale);
+      height = Math.round(height * dimensionScale);
+      
+      // Don't go below reasonable minimums for mobile
+      if (width < 600 || height < 400) {
+        if (settings.debug) {
+          console.log('[ImageResizer] Reached minimum dimensions');
+        }
+        break;
+      }
+    }
+  }
+  
+  if (settings.debug) {
+    console.log(`[ImageResizer] Final: ${formatBytes(blob.size)} after ${attempts} attempt(s)`);
+  }
+  
+  return blob;
+}
+
+/**
+ * Process image for mobile upload - always converts to JPEG and compresses
+ * This is the main function to use for mobile/iOS uploads
+ * 
+ * @param {File} file - The image file to process
+ * @param {Object} config - Configuration options
+ * @returns {Promise<{ blob: Blob, originalSize: number, finalSize: number, wasProcessed: boolean }>}
+ */
+export async function processImageForMobile(file, config = {}) {
+  const settings = {
+    maxSizeBytes: 5 * 1024 * 1024, // 5MB default for mobile
+    quality: 0.85, // Slightly lower starting quality for mobile
+    maxWidth: 3840, // 4K max width
+    maxHeight: 3840,
+    debug: false,
+    ...config,
+  };
+  
+  const originalSize = file.size;
+  
+  if (settings.debug) {
+    console.log(`[ImageResizer] Processing for mobile: ${file.name} (${formatBytes(originalSize)})`);
+  }
+  
+  try {
+    const blob = await forceConvertToJpeg(file, settings);
+    
+    return {
+      blob,
+      originalSize,
+      finalSize: blob.size,
+      wasProcessed: true,
+    };
+  } catch (error) {
+    console.error('[ImageResizer] Mobile processing failed:', error);
+    throw error;
+  }
+}
+
 export default {
   resizeImage,
   prepareImageForUpload,
   needsResize,
   formatBytes,
+  isMobileDevice,
+  forceConvertToJpeg,
+  processImageForMobile,
 };
 
