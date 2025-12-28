@@ -244,7 +244,8 @@ async function handleImageFile(file) {
       console.log(`[Admin] Converting HEIC file: ${file.name} (${formatBytes(file.size)})`);
       
       try {
-        processedFile = await convertHeicToJpeg(file, { quality: 0.85, debug: true });
+        // Use lower quality (0.6) for HEIC conversion since we'll compress again
+        processedFile = await convertHeicToJpeg(file, { quality: 0.6, debug: true });
         console.log(`[Admin] HEIC converted: ${processedFile.name} (${formatBytes(processedFile.size)})`);
         showImageStatus(`Converted to JPEG (${formatBytes(processedFile.size)})`, "success");
       } catch (heicError) {
@@ -254,54 +255,64 @@ async function handleImageFile(file) {
       }
     }
     
-    // Step 2: For mobile, ALWAYS process through canvas to ensure JPEG and proper compression
-    // For desktop, only process if over the size limit
+    // Step 2: ALWAYS process through canvas compression for consistent results
+    // This ensures all images (especially HEIC conversions) are properly compressed
     let uploadFile;
+    const HARD_LIMIT = 9 * 1024 * 1024; // 9MB - stay under Cloudinary's 10MB limit
     
-    if (onMobile) {
-      // Mobile: Always convert to JPEG and compress to under 5MB
-      showImageStatus(`Optimizing for upload (${formatBytes(processedFile.size)})...`, "");
+    // Always compress if file is over 5MB OR if we're on mobile
+    const needsCompression = processedFile.size > MAX_SIZE || onMobile;
+    
+    console.log(`[Admin] File size: ${formatBytes(processedFile.size)}, Mobile: ${onMobile}, Needs compression: ${needsCompression}`);
+    
+    if (needsCompression || processedFile.size > HARD_LIMIT) {
+      showImageStatus(`Optimizing image (${formatBytes(processedFile.size)})...`, "");
       
-      const result = await processImageForMobile(processedFile, {
-        maxSizeBytes: MAX_SIZE,
-        quality: 0.82, // Slightly more aggressive quality for mobile
-        debug: true,
-      });
-      
-      console.log(`[Admin] Mobile optimization: ${formatBytes(result.originalSize)} → ${formatBytes(result.finalSize)}`);
-      showImageStatus(`Optimized to ${formatBytes(result.finalSize)}, uploading...`, "success");
-      
-      // Create a new File object from the blob
-      const newFileName = processedFile.name.replace(/\.[^.]+$/, '.jpg');
-      uploadFile = new File([result.blob], newFileName, { 
-        type: 'image/jpeg' 
-      });
-    } else {
-      // Desktop: Only compress if over the limit
-      if (processedFile.size > MAX_SIZE) {
-        showImageStatus(`Resizing large image (${formatBytes(processedFile.size)})...`, "");
-        
-        const result = await prepareImageForUpload(processedFile, {
-          maxSizeBytes: MAX_SIZE,
-          quality: 0.90,
+      try {
+        const result = await processImageForMobile(processedFile, {
+          maxSizeBytes: Math.min(MAX_SIZE, HARD_LIMIT),
+          quality: onMobile ? 0.75 : 0.82, // More aggressive on mobile
+          maxWidth: onMobile ? 2048 : 3072,
+          maxHeight: onMobile ? 2048 : 3072,
           debug: true,
         });
         
-        if (result.wasResized) {
-          console.log(`[Admin] Image resized from ${formatBytes(result.originalSize)} to ${formatBytes(result.finalSize)}`);
-          showImageStatus(`Compressed to ${formatBytes(result.finalSize)}, uploading...`, "success");
+        console.log(`[Admin] Compression result: ${formatBytes(result.originalSize)} → ${formatBytes(result.finalSize)}`);
+        
+        if (!result.blob || result.blob.size === 0) {
+          throw new Error('Compression produced empty result');
         }
         
-        // Create a new File object from the blob to maintain filename
-        uploadFile = new File([result.blob], processedFile.name, { 
-          type: result.blob.type || 'image/jpeg' 
+        showImageStatus(`Optimized to ${formatBytes(result.finalSize)}, uploading...`, "success");
+        
+        // Create a new File object from the blob
+        const newFileName = processedFile.name.replace(/\.[^.]+$/, '.jpg');
+        uploadFile = new File([result.blob], newFileName, { 
+          type: 'image/jpeg' 
         });
-      } else {
-        uploadFile = processedFile;
+        
+        console.log(`[Admin] Final uploadFile size: ${formatBytes(uploadFile.size)}`);
+        
+      } catch (compressionError) {
+        console.error('[Admin] Compression failed:', compressionError);
+        showImageStatus(`Compression failed: ${compressionError.message}. Try a smaller image.`, "error");
+        return; // DO NOT proceed with upload
       }
+    } else {
+      // File is small enough, use as-is
+      uploadFile = processedFile;
+      console.log(`[Admin] Using file as-is: ${formatBytes(uploadFile.size)}`);
     }
     
-    // Step 3: Upload to Cloudinary
+    // Step 3: Final safety check - HARD BLOCK if still over 10MB (Cloudinary limit)
+    const CLOUDINARY_LIMIT = 10 * 1024 * 1024; // 10MB hard limit
+    if (uploadFile.size > CLOUDINARY_LIMIT) {
+      console.error(`[Admin] BLOCKED: File still too large after compression: ${formatBytes(uploadFile.size)}`);
+      showImageStatus(`Image too large (${formatBytes(uploadFile.size)}). Please use a smaller image.`, "error");
+      return;
+    }
+    
+    // Step 4: Upload to Cloudinary
     showImageStatus(`Uploading (${formatBytes(uploadFile.size)})...`, "");
     console.log(`[Admin] Uploading: ${uploadFile.name} (${formatBytes(uploadFile.size)})`);
     

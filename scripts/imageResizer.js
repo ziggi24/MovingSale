@@ -45,11 +45,38 @@ function loadImage(dataUrl) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Failed to load image'));
-    // Important for iOS: set crossOrigin before src
-    img.crossOrigin = 'anonymous';
+    img.onerror = (e) => reject(new Error('Failed to load image: ' + e.message));
+    // Note: Don't set crossOrigin for local file uploads - it can cause issues on iOS
     img.src = dataUrl;
   });
+}
+
+/**
+ * Calculate maximum safe canvas dimensions for iOS
+ * iOS has strict limits on canvas size (varies by device, typically 4096x4096 or less)
+ * @returns {{ maxWidth: number, maxHeight: number, maxPixels: number }}
+ */
+function getIOSSafeCanvasLimits() {
+  // iOS Safari has a maximum canvas size limit
+  // Older devices: ~5 megapixels, Newer devices: ~16 megapixels
+  // To be safe, we limit to 4 megapixels (2048x2048) which works on all iOS devices
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  
+  if (isIOS) {
+    return {
+      maxWidth: 2048,
+      maxHeight: 2048,
+      maxPixels: 4 * 1024 * 1024, // 4 megapixels
+    };
+  }
+  
+  // For other devices, allow larger canvases
+  return {
+    maxWidth: 4096,
+    maxHeight: 4096,
+    maxPixels: 16 * 1024 * 1024, // 16 megapixels
+  };
 }
 
 /**
@@ -344,6 +371,7 @@ export function isMobileDevice() {
 /**
  * Force convert any image to JPEG and compress to target size
  * This ALWAYS processes the image through canvas, ensuring consistent output
+ * Specially optimized for iOS with canvas size limits
  * 
  * @param {File|Blob} file - The image file to convert
  * @param {Object} config - Configuration options
@@ -360,21 +388,56 @@ export async function forceConvertToJpeg(file, config = {}) {
     console.log(`[ImageResizer] Force converting: ${file.name || 'blob'} (${formatBytes(file.size)})`);
   }
   
+  // Get iOS-safe canvas limits
+  const canvasLimits = getIOSSafeCanvasLimits();
+  
+  if (settings.debug) {
+    console.log(`[ImageResizer] Canvas limits: ${canvasLimits.maxWidth}x${canvasLimits.maxHeight}`);
+  }
+  
   // Read file and load image
-  const dataUrl = await readFileAsDataURL(file);
-  const img = await loadImage(dataUrl);
+  let dataUrl;
+  try {
+    dataUrl = await readFileAsDataURL(file);
+  } catch (e) {
+    console.error('[ImageResizer] Failed to read file:', e);
+    throw new Error('Failed to read image file');
+  }
+  
+  let img;
+  try {
+    img = await loadImage(dataUrl);
+  } catch (e) {
+    console.error('[ImageResizer] Failed to load image:', e);
+    throw new Error('Failed to load image');
+  }
   
   if (settings.debug) {
     console.log(`[ImageResizer] Original dimensions: ${img.width}x${img.height}`);
   }
   
-  // Calculate initial dimensions (respect max dimension limits)
+  // Use the smaller of configured limits and iOS-safe limits
+  const effectiveMaxWidth = Math.min(settings.maxWidth, canvasLimits.maxWidth);
+  const effectiveMaxHeight = Math.min(settings.maxHeight, canvasLimits.maxHeight);
+  
+  // Calculate initial dimensions with iOS-safe limits
   let { width, height } = calculateDimensions(
     img.width, 
     img.height, 
-    settings.maxWidth, 
-    settings.maxHeight
+    effectiveMaxWidth, 
+    effectiveMaxHeight
   );
+  
+  // Additional check: ensure total pixels don't exceed iOS limit
+  let totalPixels = width * height;
+  if (totalPixels > canvasLimits.maxPixels) {
+    const scale = Math.sqrt(canvasLimits.maxPixels / totalPixels);
+    width = Math.floor(width * scale);
+    height = Math.floor(height * scale);
+    if (settings.debug) {
+      console.log(`[ImageResizer] Scaled for pixel limit: ${width}x${height}`);
+    }
+  }
   
   // Start with configured quality
   let quality = settings.quality;
@@ -386,43 +449,63 @@ export async function forceConvertToJpeg(file, config = {}) {
   while (attempts < maxAttempts) {
     attempts++;
     
-    // Draw image to canvas at current dimensions
-    const canvas = drawToCanvas(img, width, height);
-    
-    // Convert to JPEG blob
-    blob = await canvasToBlob(canvas, 'image/jpeg', quality);
-    
-    if (settings.debug) {
-      console.log(`[ImageResizer] Attempt ${attempts}: ${width}x${height} @ quality ${quality.toFixed(2)} = ${formatBytes(blob.size)}`);
-    }
-    
-    // Check if we're under the limit
-    if (blob.size <= settings.maxSizeBytes) {
-      break;
-    }
-    
-    // Calculate how much we need to reduce
-    const sizeRatio = settings.maxSizeBytes / blob.size;
-    
-    // More aggressive reduction for mobile
-    if (quality > 0.4) {
-      // Reduce quality more aggressively
-      const qualityReduction = Math.max(0.08, (1 - sizeRatio) * 0.25);
-      quality = Math.max(0.4, quality - qualityReduction);
-    } else {
-      // Quality is already low, reduce dimensions more aggressively
-      const dimensionScale = Math.max(0.65, Math.sqrt(sizeRatio * 0.85));
-      width = Math.round(width * dimensionScale);
-      height = Math.round(height * dimensionScale);
+    try {
+      // Draw image to canvas at current dimensions
+      const canvas = drawToCanvas(img, width, height, false); // Disable progressive resize for iOS compatibility
       
-      // Don't go below reasonable minimums for mobile
-      if (width < 600 || height < 400) {
-        if (settings.debug) {
-          console.log('[ImageResizer] Reached minimum dimensions');
-        }
+      // Convert to JPEG blob
+      blob = await canvasToBlob(canvas, 'image/jpeg', quality);
+      
+      if (settings.debug) {
+        console.log(`[ImageResizer] Attempt ${attempts}: ${width}x${height} @ quality ${quality.toFixed(2)} = ${formatBytes(blob.size)}`);
+      }
+      
+      // Check if we're under the limit
+      if (blob.size <= settings.maxSizeBytes) {
         break;
       }
+      
+      // Calculate how much we need to reduce
+      const sizeRatio = settings.maxSizeBytes / blob.size;
+      
+      // More aggressive reduction for mobile
+      if (quality > 0.35) {
+        // Reduce quality more aggressively
+        const qualityReduction = Math.max(0.1, (1 - sizeRatio) * 0.3);
+        quality = Math.max(0.35, quality - qualityReduction);
+      } else {
+        // Quality is already low, reduce dimensions more aggressively
+        const dimensionScale = Math.max(0.6, Math.sqrt(sizeRatio * 0.8));
+        width = Math.round(width * dimensionScale);
+        height = Math.round(height * dimensionScale);
+        
+        // Don't go below reasonable minimums for mobile
+        if (width < 400 || height < 300) {
+          if (settings.debug) {
+            console.log('[ImageResizer] Reached minimum dimensions');
+          }
+          break;
+        }
+      }
+    } catch (canvasError) {
+      console.error('[ImageResizer] Canvas error at attempt', attempts, ':', canvasError);
+      // If canvas fails, try smaller dimensions
+      width = Math.round(width * 0.7);
+      height = Math.round(height * 0.7);
+      if (width < 400 || height < 300) {
+        throw new Error('Failed to process image - canvas errors');
+      }
     }
+  }
+  
+  if (!blob) {
+    throw new Error('Failed to create compressed image');
+  }
+  
+  // Final safety check - if still too large, throw error instead of uploading
+  if (blob.size > settings.maxSizeBytes) {
+    console.warn(`[ImageResizer] Could not compress below limit: ${formatBytes(blob.size)} > ${formatBytes(settings.maxSizeBytes)}`);
+    // Still return the best we could do, but log a warning
   }
   
   if (settings.debug) {

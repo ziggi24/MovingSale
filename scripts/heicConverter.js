@@ -90,26 +90,33 @@ export function isHeicFile(file) {
  * Convert a HEIC/HEIF file to JPEG
  * @param {File} file - The HEIC/HEIF file to convert
  * @param {Object} options - Conversion options
- * @param {number} options.quality - JPEG quality (0-1), default 0.92
+ * @param {number} options.quality - JPEG quality (0-1), default 0.7 for smaller output
  * @param {boolean} options.debug - Enable debug logging
  * @returns {Promise<File>} - Converted JPEG file
  */
 export async function convertHeicToJpeg(file, options = {}) {
-  const { quality = 0.92, debug = false } = options;
+  // Use lower quality by default since we'll compress again later if needed
+  const { quality = 0.7, debug = false } = options;
   
   if (debug) {
-    console.log(`[HeicConverter] Converting ${file.name} (${file.type}) to JPEG`);
+    console.log(`[HeicConverter] Converting ${file.name} (${file.type}) to JPEG at quality ${quality}`);
   }
   
   // Load the library
-  const converter = await loadHeic2any();
+  let converter;
+  try {
+    converter = await loadHeic2any();
+  } catch (loadError) {
+    console.error('[HeicConverter] Failed to load heic2any:', loadError);
+    throw new Error('Could not load HEIC converter library');
+  }
   
   if (!converter) {
     throw new Error('heic2any library not available');
   }
   
   try {
-    // Convert HEIC to JPEG blob
+    // Convert HEIC to JPEG blob with lower quality
     const jpegBlob = await converter({
       blob: file,
       toType: 'image/jpeg',
@@ -118,6 +125,10 @@ export async function convertHeicToJpeg(file, options = {}) {
     
     // heic2any can return a single blob or array of blobs
     const resultBlob = Array.isArray(jpegBlob) ? jpegBlob[0] : jpegBlob;
+    
+    if (!resultBlob || resultBlob.size === 0) {
+      throw new Error('HEIC conversion produced empty result');
+    }
     
     // Create a new File object with .jpg extension
     const newFileName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
