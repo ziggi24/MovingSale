@@ -17,6 +17,7 @@ import {
 } from "./firebaseClient.js";
 
 import { prepareImageForUpload, formatBytes } from "./imageResizer.js";
+import { isHeicFile, convertHeicToJpeg } from "./heicConverter.js";
 
 // =====================================================
 // CLOUDINARY CONFIGURATION
@@ -176,8 +177,15 @@ function initImageUpload() {
 }
 
 async function handleImageFiles(files) {
-  // Filter to only image files
-  const imageFiles = files.filter(file => file.type.startsWith("image/"));
+  // Filter to only image files (including HEIC/HEIF which may have no MIME type on iOS)
+  const imageFiles = files.filter(file => {
+    // Standard image MIME types
+    if (file.type.startsWith("image/")) return true;
+    // HEIC/HEIF files (iOS may not set proper MIME type)
+    const fileName = file.name.toLowerCase();
+    if (fileName.endsWith('.heic') || fileName.endsWith('.heif')) return true;
+    return false;
+  });
   
   if (imageFiles.length === 0) {
     showImageStatus("Please select image files.", "error");
@@ -222,14 +230,32 @@ async function handleImageFile(file) {
   showUploadingState();
   
   try {
-    // Check if image needs resizing (over 8MB)
-    let uploadFile = file;
+    let processedFile = file;
     const MAX_SIZE = 8 * 1024 * 1024; // 8MB
     
-    if (file.size > MAX_SIZE) {
-      showImageStatus(`Resizing large image (${formatBytes(file.size)})...`, "");
+    // Step 1: Convert HEIC/HEIF files to JPEG first
+    if (isHeicFile(file)) {
+      showImageStatus(`Converting HEIC image...`, "");
+      console.log(`[Admin] Converting HEIC file: ${file.name} (${formatBytes(file.size)})`);
       
-      const result = await prepareImageForUpload(file, {
+      try {
+        processedFile = await convertHeicToJpeg(file, { quality: 0.92, debug: true });
+        console.log(`[Admin] HEIC converted: ${processedFile.name} (${formatBytes(processedFile.size)})`);
+        showImageStatus(`Converted to JPEG (${formatBytes(processedFile.size)})`, "success");
+      } catch (heicError) {
+        console.error("[Admin] HEIC conversion failed:", heicError);
+        showImageStatus(`HEIC conversion failed: ${heicError.message}`, "error");
+        return;
+      }
+    }
+    
+    // Step 2: Resize if image is over 8MB (after HEIC conversion if applicable)
+    let uploadFile = processedFile;
+    
+    if (processedFile.size > MAX_SIZE) {
+      showImageStatus(`Resizing large image (${formatBytes(processedFile.size)})...`, "");
+      
+      const result = await prepareImageForUpload(processedFile, {
         maxSizeBytes: MAX_SIZE,
         quality: 0.92,
         debug: true,
@@ -241,12 +267,13 @@ async function handleImageFile(file) {
       }
       
       // Create a new File object from the blob to maintain filename
-      uploadFile = new File([result.blob], file.name, { 
+      uploadFile = new File([result.blob], processedFile.name, { 
         type: result.blob.type || 'image/jpeg' 
       });
     }
     
-    // Upload to Cloudinary
+    // Step 3: Upload to Cloudinary
+    showImageStatus(`Uploading...`, "");
     const imageUrl = await uploadToCloudinary(uploadFile);
     
     // Add to current images array
