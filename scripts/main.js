@@ -20,7 +20,7 @@ import {
 let allItems = [];
 let filteredItems = [];
 let activeTags = new Set();
-let currentSort = "lowest";
+let currentSort = "default";
 let currentUser = null;
 let isAdmin = false;
 
@@ -677,8 +677,116 @@ function getPriceSortValue(price) {
   return Infinity;
 }
 
+// Helper function to get price sort value for default sort
+// Returns an object with { hasPrice: boolean, priceValue: number }
+// Free items and items without numerical price get hasPrice: false
+function getDefaultPriceSortValue(price) {
+  if (price === null || price === undefined) {
+    return { hasPrice: false, priceValue: Infinity };
+  }
+  
+  // If price is 0 (number), it's free
+  if (price === 0) {
+    return { hasPrice: false, priceValue: 0 };
+  }
+  
+  // If price is a number (not 0), return it
+  if (typeof price === "number") {
+    return { hasPrice: true, priceValue: price };
+  }
+  
+  // If price is a string, try to extract a numeric value
+  if (typeof price === "string") {
+    const trimmed = price.trim();
+    
+    // Check if it's a single number
+    const numberMatch = trimmed.match(/^\d+$/);
+    if (numberMatch) {
+      return { hasPrice: true, priceValue: parseInt(numberMatch[0], 10) };
+    }
+    
+    // Check if it's a range (extract first number - the smaller price)
+    const rangeMatch = trimmed.match(/^(\d+)\s*-\s*\d+$/);
+    if (rangeMatch) {
+      return { hasPrice: true, priceValue: parseInt(rangeMatch[1], 10) };
+    }
+    
+    // For custom strings (non-numeric), treat as no price
+    return { hasPrice: false, priceValue: Infinity };
+  }
+  
+  return { hasPrice: false, priceValue: Infinity };
+}
+
+// Helper function to get category priority for default sort
+// Returns the index in the priority list, or -1 if not found
+function getCategoryPriority(item) {
+  const categoryOrder = ["furniture", "kitchen", "electronics", "decoration", "cats", "misc"];
+  const ignoreTags = ["available now", "available feb"];
+  
+  if (!item.tags || !Array.isArray(item.tags)) {
+    return categoryOrder.indexOf("misc"); // No tags = misc
+  }
+  
+  // Find the earliest tag in the priority list
+  let earliestIndex = -1;
+  let earliestPriority = Infinity;
+  
+  for (const tag of item.tags) {
+    const normalizedTag = normalizeTag(tag);
+    
+    // Skip ignored tags
+    if (ignoreTags.includes(normalizedTag)) {
+      continue;
+    }
+    
+    const priority = categoryOrder.indexOf(normalizedTag);
+    if (priority !== -1 && priority < earliestPriority) {
+      earliestPriority = priority;
+      earliestIndex = priority;
+    }
+  }
+  
+  // If no matching tag found, put in misc
+  if (earliestIndex === -1) {
+    return categoryOrder.indexOf("misc");
+  }
+  
+  return earliestIndex;
+}
+
 function sortItems() {
   switch (currentSort) {
+    case "default":
+      filteredItems.sort((a, b) => {
+        // First, sort by category priority
+        const aCategory = getCategoryPriority(a);
+        const bCategory = getCategoryPriority(b);
+        
+        if (aCategory !== bCategory) {
+          return aCategory - bCategory;
+        }
+        
+        // Within the same category, sort by price
+        const aPrice = getDefaultPriceSortValue(a.price);
+        const bPrice = getDefaultPriceSortValue(b.price);
+        
+        // Free items and items without numerical price come first
+        if (aPrice.hasPrice !== bPrice.hasPrice) {
+          return aPrice.hasPrice ? 1 : -1; // hasPrice: false comes first
+        }
+        
+        // If both have prices or both don't have prices, sort by price value
+        if (aPrice.priceValue !== bPrice.priceValue) {
+          return aPrice.priceValue - bPrice.priceValue;
+        }
+        
+        // If prices are equal, sort alphabetically by name as tiebreaker
+        const nameA = (a.name || "").toLowerCase();
+        const nameB = (b.name || "").toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+      break;
     case "lowest":
       filteredItems.sort((a, b) => {
         const aVal = getPriceSortValue(a.price);
