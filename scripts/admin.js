@@ -16,6 +16,8 @@ import {
   checkIsAdmin,
 } from "./firebaseClient.js";
 
+import { prepareImageForUpload, formatBytes } from "./imageResizer.js";
+
 // =====================================================
 // CLOUDINARY CONFIGURATION
 // =====================================================
@@ -189,10 +191,10 @@ async function handleImageFiles(files) {
     return;
   }
 
-  // Validate each file
+  // Validate each file - allow up to 50MB since we resize before upload
   for (const file of imageFiles) {
-    if (file.size > 10 * 1024 * 1024) {
-      showImageStatus(`Image "${file.name}" must be less than 10MB.`, "error");
+    if (file.size > 50 * 1024 * 1024) {
+      showImageStatus(`Image "${file.name}" is too large (max 50MB).`, "error");
       return;
     }
   }
@@ -220,8 +222,32 @@ async function handleImageFile(file) {
   showUploadingState();
   
   try {
+    // Check if image needs resizing (over 8MB)
+    let uploadFile = file;
+    const MAX_SIZE = 8 * 1024 * 1024; // 8MB
+    
+    if (file.size > MAX_SIZE) {
+      showImageStatus(`Resizing large image (${formatBytes(file.size)})...`, "");
+      
+      const result = await prepareImageForUpload(file, {
+        maxSizeBytes: MAX_SIZE,
+        quality: 0.92,
+        debug: true,
+      });
+      
+      if (result.wasResized) {
+        console.log(`[Admin] Image resized from ${formatBytes(result.originalSize)} to ${formatBytes(result.finalSize)}`);
+        showImageStatus(`Compressed to ${formatBytes(result.finalSize)}, uploading...`, "success");
+      }
+      
+      // Create a new File object from the blob to maintain filename
+      uploadFile = new File([result.blob], file.name, { 
+        type: result.blob.type || 'image/jpeg' 
+      });
+    }
+    
     // Upload to Cloudinary
-    const imageUrl = await uploadToCloudinary(file);
+    const imageUrl = await uploadToCloudinary(uploadFile);
     
     // Add to current images array
     currentImages.push(imageUrl);
