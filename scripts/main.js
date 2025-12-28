@@ -771,17 +771,20 @@ function sortItems() {
         const aPrice = getDefaultPriceSortValue(a.price);
         const bPrice = getDefaultPriceSortValue(b.price);
         
-        // Free items and items without numerical price come first
+        // Items with prices come first (most expensive first)
+        // Free items and items without numerical price come after
         if (aPrice.hasPrice !== bPrice.hasPrice) {
-          return aPrice.hasPrice ? 1 : -1; // hasPrice: false comes first
+          return aPrice.hasPrice ? -1 : 1; // hasPrice: true comes first
         }
         
-        // If both have prices or both don't have prices, sort by price value
-        if (aPrice.priceValue !== bPrice.priceValue) {
-          return aPrice.priceValue - bPrice.priceValue;
+        // If both have prices, sort by price value (highest first)
+        if (aPrice.hasPrice && bPrice.hasPrice) {
+          if (aPrice.priceValue !== bPrice.priceValue) {
+            return bPrice.priceValue - aPrice.priceValue; // Reverse: highest first
+          }
         }
         
-        // If prices are equal, sort alphabetically by name as tiebreaker
+        // If both don't have prices, or prices are equal, sort alphabetically by name as tiebreaker
         const nameA = (a.name || "").toLowerCase();
         const nameB = (b.name || "").toLowerCase();
         return nameA.localeCompare(nameB);
