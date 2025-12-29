@@ -98,15 +98,28 @@
       <!-- Items Panel -->
       <section class="admin-panel admin-panel--items">
         <header class="admin-panel__header">
-          <div>
+          <div class="admin-panel__header-content">
             <h1 class="admin-panel__title">Items</h1>
-            <p class="admin-panel__subtitle">Manage your items</p>
+            <p class="admin-panel__subtitle" id="admin-items-subtitle">0 total items on the site</p>
           </div>
           <button class="admin-add-btn" id="add-item-btn" type="button">
             <i class="fas fa-plus" aria-hidden="true"></i>
             <span>Add Item</span>
           </button>
         </header>
+        
+        <!-- Tag Filter -->
+        <div class="admin-filters" style="padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--color-border);">
+          <div class="tag-filter-dropdown-wrapper">
+            <button class="tag-filter-dropdown-btn" id="admin-tag-filter-dropdown-btn" aria-label="Filter by tags" aria-expanded="false" aria-haspopup="true">
+              <span class="tag-filter-dropdown-text" id="admin-tag-filter-dropdown-text">All Tags</span>
+              <i class="fas fa-chevron-down tag-filter-dropdown-icon select-icon" aria-hidden="true"></i>
+            </button>
+            <div class="tag-filter-dropdown-menu" id="admin-tag-filter-dropdown-menu" role="menu" aria-label="Tag filters" hidden>
+              <!-- Tag checkboxes will be dynamically generated -->
+            </div>
+          </div>
+        </div>
         
         <div class="admin-items-list" id="items-list">
           <!-- Items will be rendered here -->
@@ -123,7 +136,6 @@
         <header class="admin-panel__header">
           <div>
             <h2 class="admin-panel__title">Requests</h2>
-            <p class="admin-panel__subtitle">Incoming requests</p>
           </div>
           <div class="admin-search">
             <i class="fas fa-search" aria-hidden="true"></i>

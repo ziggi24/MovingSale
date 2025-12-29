@@ -39,6 +39,10 @@ const addItemBtn = document.getElementById("add-item-btn");
 const itemsList = document.getElementById("items-list");
 const itemsLoading = document.getElementById("items-loading");
 const itemsEmpty = document.getElementById("items-empty");
+const itemCounter = document.getElementById("item-counter");
+const adminTagFilterDropdownBtn = document.getElementById("admin-tag-filter-dropdown-btn");
+const adminTagFilterDropdownText = document.getElementById("admin-tag-filter-dropdown-text");
+const adminTagFilterDropdownMenu = document.getElementById("admin-tag-filter-dropdown-menu");
 
 // Requests elements
 const requestsList = document.getElementById("requests-list");
@@ -84,6 +88,7 @@ const mobileMenuClose = document.getElementById("mobile-menu-close");
 // =====================================================
 let currentUser = null;
 let items = [];
+let filteredItems = []; // Filtered items based on tag selection
 let requests = [];
 let filterTerm = "";
 let editingItem = null;
@@ -91,6 +96,8 @@ let currentImages = []; // Array of image URLs
 let isUploading = false;
 let uploadingImageIndex = -1; // Track which image is currently uploading
 let allExistingTags = []; // Array of all existing tags for autocomplete
+let activeTags = new Set(); // Set of active tag filters
+let allAvailableTags = []; // Array of [normalizedTag, displayTag] tuples
 
 // =====================================================
 // CLOUDINARY UPLOAD
@@ -381,11 +388,54 @@ function addImagePreview(url, index) {
   removeBtn.className = "admin-image-preview__remove";
   removeBtn.setAttribute("aria-label", `Remove image ${index + 1}`);
   removeBtn.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i>';
-  removeBtn.addEventListener("click", () => removeImage(index));
+  removeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    removeImage(index);
+  });
+  
+  // Make primary button (only shown when image is clicked and not already primary)
+  const makePrimaryBtn = document.createElement("button");
+  makePrimaryBtn.type = "button";
+  makePrimaryBtn.className = "admin-image-preview__make-primary";
+  makePrimaryBtn.textContent = "Make primary?";
+  makePrimaryBtn.hidden = true;
+  makePrimaryBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    makePrimaryImage(index);
+  });
+  
+  // Make image clickable in edit mode (when editingItem exists)
+  if (editingItem && index > 0) {
+    previewItem.style.cursor = "pointer";
+    previewItem.addEventListener("click", () => {
+      // Hide all other "Make primary?" buttons
+      document.querySelectorAll(".admin-image-preview__make-primary").forEach(btn => {
+        btn.hidden = true;
+      });
+      // Show this one
+      makePrimaryBtn.hidden = false;
+    });
+  }
   
   previewItem.appendChild(img);
   previewItem.appendChild(removeBtn);
+  previewItem.appendChild(makePrimaryBtn);
   imagesPreviewGrid.appendChild(previewItem);
+}
+
+function makePrimaryImage(index) {
+  if (index === 0 || index >= currentImages.length) return;
+  
+  // Swap the clicked image with the first image
+  const temp = currentImages[0];
+  currentImages[0] = currentImages[index];
+  currentImages[index] = temp;
+  
+  // Update the input
+  updateImagesInput();
+  
+  // Re-render preview grid
+  renderImagePreviews();
 }
 
 function removeImage(index) {
@@ -611,6 +661,10 @@ function closeModal() {
   modalStatus.hidden = true;
   // Reset submit button state when closing
   modalSubmit.disabled = false;
+  // Reset delete button state when closing
+  if (modalDelete) {
+    modalDelete.disabled = false;
+  }
 }
 
 // =====================================================
@@ -672,6 +726,8 @@ function init() {
       await deleteDoc(doc(db, "items", editingItem.id));
       closeModal();
       await loadItems();
+      // Reset delete button state after successful deletion
+      modalDelete.disabled = false;
     } catch (err) {
       console.error("Delete failed", err);
       modalStatus.textContent = "Error deleting item.";
@@ -719,6 +775,27 @@ function init() {
   requestSearch?.addEventListener("input", () => {
     filterTerm = requestSearch.value.toLowerCase();
     renderRequests();
+  });
+
+  // Admin tag filter dropdown toggle
+  adminTagFilterDropdownBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isExpanded = adminTagFilterDropdownBtn.getAttribute("aria-expanded") === "true";
+    const newExpandedState = !isExpanded;
+    adminTagFilterDropdownBtn.setAttribute("aria-expanded", newExpandedState.toString());
+    if (adminTagFilterDropdownMenu) {
+      adminTagFilterDropdownMenu.hidden = !newExpandedState;
+    }
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", (e) => {
+    if (adminTagFilterDropdownBtn && adminTagFilterDropdownMenu) {
+      if (!adminTagFilterDropdownBtn.contains(e.target) && !adminTagFilterDropdownMenu.contains(e.target)) {
+        adminTagFilterDropdownBtn.setAttribute("aria-expanded", "false");
+        adminTagFilterDropdownMenu.hidden = true;
+      }
+    }
   });
 
   // Escape key
@@ -848,6 +925,140 @@ function extractAllTags(items) {
   return Array.from(tagSet).sort();
 }
 
+// Extract tags with display format for filtering
+function extractTagsForFiltering(items) {
+  const tagMap = new Map();
+  items.forEach((item) => {
+    if (item.tags && Array.isArray(item.tags)) {
+      item.tags.forEach((tag) => {
+        const normalized = normalizeTag(tag);
+        if (!tagMap.has(normalized)) {
+          tagMap.set(normalized, formatTagForDisplay(tag));
+        }
+      });
+    }
+  });
+  return Array.from(tagMap.entries()).sort((a, b) => 
+    a[1].localeCompare(b[1])
+  );
+}
+
+// Render tag filter dropdown
+function renderAdminTagFilters(tags) {
+  allAvailableTags = tags;
+  if (!adminTagFilterDropdownMenu) return;
+  
+  adminTagFilterDropdownMenu.innerHTML = "";
+  
+  // Ensure dropdown is hidden initially
+  adminTagFilterDropdownMenu.hidden = true;
+  if (adminTagFilterDropdownBtn) {
+    adminTagFilterDropdownBtn.setAttribute("aria-expanded", "false");
+  }
+
+  // Initialize all tags as active by default
+  activeTags.clear();
+  tags.forEach(([normalizedTag]) => {
+    activeTags.add(normalizedTag);
+  });
+
+  tags.forEach(([normalizedTag, displayTag]) => {
+    const label = document.createElement("label");
+    label.className = "tag-filter-option";
+    label.setAttribute("role", "menuitemcheckbox");
+    label.setAttribute("aria-checked", "true");
+    
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "tag-filter-checkbox";
+    checkbox.checked = true;
+    checkbox.setAttribute("data-tag", normalizedTag);
+    checkbox.addEventListener("change", () => toggleAdminTagFilter(normalizedTag, checkbox));
+    
+    const span = document.createElement("span");
+    span.className = "tag-filter-label";
+    span.textContent = displayTag;
+    
+    label.appendChild(checkbox);
+    label.appendChild(span);
+    adminTagFilterDropdownMenu.appendChild(label);
+  });
+
+  updateAdminFilterButtonText();
+  applyAdminFilters();
+}
+
+function toggleAdminTagFilter(tag, checkbox) {
+  if (checkbox.checked) {
+    activeTags.add(tag);
+  } else {
+    activeTags.delete(tag);
+  }
+  
+  const label = checkbox.closest(".tag-filter-option");
+  if (label) {
+    label.setAttribute("aria-checked", checkbox.checked ? "true" : "false");
+  }
+  
+  updateAdminFilterButtonText();
+  applyAdminFilters();
+}
+
+function updateAdminFilterButtonText() {
+  if (!adminTagFilterDropdownText) return;
+  const totalTags = allAvailableTags.length;
+  const activeCount = activeTags.size;
+  
+  if (activeCount === 0) {
+    adminTagFilterDropdownText.textContent = "No Tags Selected";
+  } else if (activeCount === totalTags) {
+    adminTagFilterDropdownText.textContent = "All Tags";
+  } else {
+    adminTagFilterDropdownText.textContent = `${activeCount} of ${totalTags} Tags`;
+  }
+}
+
+function applyAdminFilters() {
+  // If all tags are active, show all items
+  // If no tags are active, show nothing
+  // Otherwise, filter by active tags
+  if (allAvailableTags.length === 0) {
+    // No tags available, show all items
+    filteredItems = [...items];
+  } else if (activeTags.size === allAvailableTags.length) {
+    // All tags selected, show all items
+    filteredItems = [...items];
+  } else if (activeTags.size === 0) {
+    // No tags selected, show nothing
+    filteredItems = [];
+  } else {
+    // Some tags selected, filter items that have at least one of the active tags
+    filteredItems = items.filter((item) => {
+      if (!item.tags || !Array.isArray(item.tags) || item.tags.length === 0) {
+        return false; // Items without tags don't match any filter
+      }
+      // Check if item has at least one tag that matches an active tag
+      return item.tags.some((tag) => {
+        const normalized = normalizeTag(tag);
+        return activeTags.has(normalized);
+      });
+    });
+  }
+  
+  renderItems();
+  updateItemCounter();
+}
+
+function updateItemCounter() {
+  const total = items.length;
+  const subtitle = document.getElementById("admin-items-subtitle");
+  
+  // Update subtitle with total items
+  if (subtitle) {
+    subtitle.textContent = `${total} total item${total !== 1 ? 's' : ''} on the site`;
+  }
+}
+
 async function loadItems() {
   itemsLoading.hidden = false;
   itemsEmpty.hidden = true;
@@ -860,7 +1071,11 @@ async function loadItems() {
     // Extract all existing tags for autocomplete
     allExistingTags = extractAllTags(items);
     
-    renderItems();
+    // Extract tags for filtering and render filter dropdown
+    const tagsForFiltering = extractTagsForFiltering(items);
+    renderAdminTagFilters(tagsForFiltering);
+    
+    // applyAdminFilters() is called by renderAdminTagFilters, which will render items
   } catch (err) {
     console.error("Failed to load items", err);
     itemsList.innerHTML = '<p class="admin-error">Error loading items.</p>';
@@ -906,14 +1121,15 @@ function formatPrice(price) {
 function renderItems() {
   itemsList.innerHTML = "";
   
-  if (!items.length) {
+  // Ensure filteredItems is defined
+  if (!filteredItems || filteredItems.length === 0) {
     itemsEmpty.hidden = false;
     return;
   }
   
   itemsEmpty.hidden = true;
   
-  items.forEach((item) => {
+  filteredItems.forEach((item) => {
     const row = document.createElement("div");
     row.className = "admin-item-row";
     row.setAttribute("tabindex", "0");
@@ -978,16 +1194,6 @@ async function loadRequests() {
   }
 }
 
-// Status options for cycling
-const STATUS_OPTIONS = ['new', 'contacted', 'pending', 'sold', 'declined'];
-const STATUS_LABELS = {
-  new: 'New',
-  contacted: 'Contacted',
-  pending: 'Pending',
-  sold: 'Sold',
-  declined: 'Declined'
-};
-
 function formatRequestDate(timestamp) {
   if (!timestamp) return null;
   
@@ -1046,9 +1252,6 @@ function renderRequests() {
   filtered.forEach((r) => {
     const card = document.createElement("article");
     card.className = "admin-request-card";
-    
-    // Determine current status
-    const currentStatus = r.status || 'new';
 
     // Header section with item name and timestamp
     const header = document.createElement("header");
@@ -1074,7 +1277,7 @@ function renderRequests() {
     headerTop.appendChild(title);
     headerTop.appendChild(deleteBtn);
     
-    // Timestamp and status row
+    // Timestamp row
     const headerMeta = document.createElement("div");
     headerMeta.className = "admin-request-card__meta";
     
@@ -1086,66 +1289,6 @@ function renderRequests() {
       timestamp.innerHTML = `<i class="fas fa-clock" aria-hidden="true"></i>${dateStr}`;
       headerMeta.appendChild(timestamp);
     }
-    
-    // Status button (clickable to cycle through states)
-    const statusBtn = document.createElement("button");
-    statusBtn.className = `admin-status-btn admin-status-btn--${currentStatus}`;
-    statusBtn.setAttribute("aria-label", `Status: ${STATUS_LABELS[currentStatus]}. Click to change status.`);
-    statusBtn.innerHTML = `
-      <span class="admin-status-btn__dot"></span>
-      <span class="admin-status-btn__text">${STATUS_LABELS[currentStatus]}</span>
-      <i class="fas fa-chevron-down admin-status-btn__icon" aria-hidden="true"></i>
-    `;
-    
-    // Create status dropdown
-    const statusDropdown = document.createElement("div");
-    statusDropdown.className = "admin-status-dropdown";
-    statusDropdown.hidden = true;
-    
-    STATUS_OPTIONS.forEach(status => {
-      const option = document.createElement("button");
-      option.className = `admin-status-dropdown__option admin-status-dropdown__option--${status}`;
-      if (status === currentStatus) {
-        option.classList.add('active');
-      }
-      option.innerHTML = `
-        <span class="admin-status-btn__dot"></span>
-        <span>${STATUS_LABELS[status]}</span>
-      `;
-      option.addEventListener("click", (e) => {
-        e.stopPropagation();
-        handleStatusChange(r, status);
-        statusDropdown.hidden = true;
-        statusBtn.setAttribute("aria-expanded", "false");
-      });
-      statusDropdown.appendChild(option);
-    });
-    
-    // Status button click handler
-    statusBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      // Close all other dropdowns first
-      document.querySelectorAll('.admin-status-dropdown').forEach(dd => {
-        if (dd !== statusDropdown) {
-          dd.hidden = true;
-        }
-      });
-      document.querySelectorAll('.admin-status-btn').forEach(btn => {
-        if (btn !== statusBtn) {
-          btn.setAttribute("aria-expanded", "false");
-        }
-      });
-      
-      const isOpen = !statusDropdown.hidden;
-      statusDropdown.hidden = isOpen;
-      statusBtn.setAttribute("aria-expanded", !isOpen);
-    });
-    
-    const statusWrapper = document.createElement("div");
-    statusWrapper.className = "admin-status-wrapper";
-    statusWrapper.appendChild(statusBtn);
-    statusWrapper.appendChild(statusDropdown);
-    headerMeta.appendChild(statusWrapper);
     
     header.appendChild(headerTop);
     header.appendChild(headerMeta);
@@ -1203,33 +1346,6 @@ function renderRequests() {
     card.appendChild(body);
     requestsList.appendChild(card);
   });
-  
-  // Close dropdown when clicking outside
-  document.addEventListener("click", closeAllStatusDropdowns);
-}
-
-function closeAllStatusDropdowns() {
-  document.querySelectorAll('.admin-status-dropdown').forEach(dd => {
-    dd.hidden = true;
-  });
-  document.querySelectorAll('.admin-status-btn').forEach(btn => {
-    btn.setAttribute("aria-expanded", "false");
-  });
-}
-
-async function handleStatusChange(request, newStatus) {
-  try {
-    await updateDoc(doc(db, "requests", request.id), { status: newStatus });
-    // Update local state
-    const requestIndex = requests.findIndex(r => r.id === request.id);
-    if (requestIndex !== -1) {
-      requests[requestIndex].status = newStatus;
-    }
-    renderRequests();
-  } catch (err) {
-    console.error("Failed to update status", err);
-    alert("Error updating status. Please try again.");
-  }
 }
 
 async function handleDeleteRequest(request) {
