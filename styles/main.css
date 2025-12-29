@@ -773,8 +773,10 @@ a {
 
 .filters {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
     gap: var(--space-sm);
+    flex-wrap: wrap;
 }
 
 .filters-label {
@@ -783,12 +785,15 @@ a {
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--color-text-subtle);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 /* Tag Filter Dropdown */
 .tag-filter-dropdown-wrapper {
     position: relative;
-    width: 100%;
+    flex: 1;
+    min-width: 200px;
     max-width: 300px;
 }
 
@@ -894,8 +899,10 @@ a {
 
 .sort {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
     gap: var(--space-sm);
+    flex-wrap: wrap;
 }
 
 .sort-label {
@@ -904,11 +911,14 @@ a {
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--color-text-subtle);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .select-wrapper {
     position: relative;
-    width: 100%;
+    flex: 1;
+    min-width: 150px;
     max-width: 300px;
 }
 
@@ -1950,7 +1960,7 @@ a {
     .controls-container {
         flex-direction: row;
         justify-content: space-between;
-        align-items: flex-start;
+        align-items: center;
         gap: var(--space-lg);
     }
 
