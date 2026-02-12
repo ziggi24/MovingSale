@@ -1593,6 +1593,7 @@ a {
     line-height: 1.8;
     color: var(--color-text-muted);
     margin-bottom: var(--space-xl);
+    white-space: pre-wrap; /* preserve newlines and spacing from admin textarea */
 }
 
 .modal-product-link {
