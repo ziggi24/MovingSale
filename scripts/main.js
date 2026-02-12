@@ -302,15 +302,15 @@ function initHeroGlobe() {
   // Custom globe material for darker appearance
   globe.onGlobeReady(() => {
     const globeMaterial = globe.globeMaterial();
+    if (!globeMaterial) return;
     globeMaterial.bumpScale = 3;
-    
-    // Make globe darker
-    if (isDark) {
-      globeMaterial.color.setHex(0x1a1510);
-      globeMaterial.emissive.setHex(0x0a0805);
-      globeMaterial.emissiveIntensity = 0.1;
-    } else {
-      globeMaterial.color.setHex(0xe8e5e0);
+
+    if (globeMaterial.color) {
+      globeMaterial.color.setHex(isDark ? 0x1a1510 : 0xe8e5e0);
+    }
+    if (globeMaterial.emissive) {
+      globeMaterial.emissive.setHex(isDark ? 0x0a0805 : 0x000000);
+      if (isDark) globeMaterial.emissiveIntensity = 0.1;
     }
   });
 
@@ -330,12 +330,11 @@ function initHeroGlobe() {
         globe.atmosphereColor(newColors.arc);
         
         const globeMaterial = globe.globeMaterial();
-        if (newIsDark) {
-          globeMaterial.color.setHex(0x1a1510);
-          globeMaterial.emissive.setHex(0x0a0805);
-        } else {
-          globeMaterial.color.setHex(0xe8e5e0);
-          globeMaterial.emissive.setHex(0x000000);
+        if (globeMaterial?.color) {
+          globeMaterial.color.setHex(newIsDark ? 0x1a1510 : 0xe8e5e0);
+        }
+        if (globeMaterial?.emissive) {
+          globeMaterial.emissive.setHex(newIsDark ? 0x0a0805 : 0x000000);
         }
       }
     });
@@ -481,6 +480,9 @@ async function loadItems() {
   }
 }
 
+// Tags to exclude from the filter dropdown (they won't appear as filter options)
+const FRONTEND_HIDDEN_TAGS = ["available now", "available feb"];
+
 // Helper function to normalize tags (lowercase for comparison)
 function normalizeTag(tag) {
   return tag.toLowerCase().trim();
@@ -500,6 +502,8 @@ function extractUniqueTags(items) {
     if (item.tags && Array.isArray(item.tags)) {
       item.tags.forEach((tag) => {
         const normalized = normalizeTag(tag);
+        // Exclude hidden tags from the filter dropdown
+        if (FRONTEND_HIDDEN_TAGS.includes(normalized)) return;
         // Store the first occurrence's display format, or use title case
         if (!tagMap.has(normalized)) {
           tagMap.set(normalized, formatTagForDisplay(tag));
@@ -721,7 +725,7 @@ function getDefaultPriceSortValue(price) {
 // Helper function to get category priority for default sort
 // Returns the index in the priority list, or -1 if not found
 function getCategoryPriority(item) {
-  const categoryOrder = ["furniture", "kitchen", "electronics", "decoration", "cats", "misc"];
+  const categoryOrder = ["furniture", "kitchen", "electronics", "cat", "cats", "exercise", "decoration", "clothing", "art", "misc"];
   const ignoreTags = ["available now", "available feb"];
   
   if (!item.tags || !Array.isArray(item.tags)) {
@@ -1261,12 +1265,14 @@ function openModal(item) {
   const tagsContainer = document.createElement("div");
   tagsContainer.className = "modal-tags";
   if (item.tags && Array.isArray(item.tags)) {
-    item.tags.forEach((tag) => {
-      const tagElement = document.createElement("span");
-      tagElement.className = "modal-tag";
-      tagElement.textContent = formatTagForDisplay(tag);
-      tagsContainer.appendChild(tagElement);
-    });
+    item.tags
+      .filter((tag) => !FRONTEND_HIDDEN_TAGS.includes(normalizeTag(tag)))
+      .forEach((tag) => {
+        const tagElement = document.createElement("span");
+        tagElement.className = "modal-tag";
+        tagElement.textContent = formatTagForDisplay(tag);
+        tagsContainer.appendChild(tagElement);
+      });
   }
 
   const description = document.createElement("p");

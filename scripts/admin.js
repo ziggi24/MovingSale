@@ -16,9 +16,6 @@ import {
   checkIsAdmin,
 } from "./firebaseClient.js";
 
-import { prepareImageForUpload, formatBytes, isMobileDevice, processImageForMobile } from "./imageResizer.js";
-import { isHeicFile, convertHeicToJpeg } from "./heicConverter.js";
-
 // =====================================================
 // CLOUDINARY CONFIGURATION
 // =====================================================
@@ -39,10 +36,8 @@ const addItemBtn = document.getElementById("add-item-btn");
 const itemsList = document.getElementById("items-list");
 const itemsLoading = document.getElementById("items-loading");
 const itemsEmpty = document.getElementById("items-empty");
-const itemCounter = document.getElementById("item-counter");
-const adminTagFilterDropdownBtn = document.getElementById("admin-tag-filter-dropdown-btn");
-const adminTagFilterDropdownText = document.getElementById("admin-tag-filter-dropdown-text");
-const adminTagFilterDropdownMenu = document.getElementById("admin-tag-filter-dropdown-menu");
+const itemsTagFilter = document.getElementById("items-tag-filter");
+const itemsPanelSubtitle = document.querySelector(".admin-panel--items .admin-panel__subtitle");
 
 // Requests elements
 const requestsList = document.getElementById("requests-list");
@@ -88,7 +83,6 @@ const mobileMenuClose = document.getElementById("mobile-menu-close");
 // =====================================================
 let currentUser = null;
 let items = [];
-let filteredItems = []; // Filtered items based on tag selection
 let requests = [];
 let filterTerm = "";
 let editingItem = null;
@@ -96,8 +90,8 @@ let currentImages = []; // Array of image URLs
 let isUploading = false;
 let uploadingImageIndex = -1; // Track which image is currently uploading
 let allExistingTags = []; // Array of all existing tags for autocomplete
-let activeTags = new Set(); // Set of active tag filters
-let allAvailableTags = []; // Array of [normalizedTag, displayTag] tuples
+let activeItemsTagFilter = "all";
+const ADMIN_HIDDEN_FILTER_TAGS = ["available now", "available feb"];
 
 // =====================================================
 // CLOUDINARY UPLOAD
@@ -184,15 +178,8 @@ function initImageUpload() {
 }
 
 async function handleImageFiles(files) {
-  // Filter to only image files (including HEIC/HEIF which may have no MIME type on iOS)
-  const imageFiles = files.filter(file => {
-    // Standard image MIME types
-    if (file.type.startsWith("image/")) return true;
-    // HEIC/HEIF files (iOS may not set proper MIME type)
-    const fileName = file.name.toLowerCase();
-    if (fileName.endsWith('.heic') || fileName.endsWith('.heif')) return true;
-    return false;
-  });
+  // Filter to only image files
+  const imageFiles = files.filter(file => file.type.startsWith("image/"));
   
   if (imageFiles.length === 0) {
     showImageStatus("Please select image files.", "error");
@@ -206,10 +193,10 @@ async function handleImageFiles(files) {
     return;
   }
 
-  // Validate each file - allow up to 50MB since we resize before upload
+  // Validate each file
   for (const file of imageFiles) {
-    if (file.size > 50 * 1024 * 1024) {
-      showImageStatus(`Image "${file.name}" is too large (max 50MB).`, "error");
+    if (file.size > 10 * 1024 * 1024) {
+      showImageStatus(`Image "${file.name}" must be less than 10MB.`, "error");
       return;
     }
   }
@@ -236,94 +223,9 @@ async function handleImageFile(file) {
   uploadingImageIndex = imageIndex;
   showUploadingState();
   
-  // Detect if on mobile - use more aggressive compression
-  const onMobile = isMobileDevice();
-  const MAX_SIZE = onMobile ? 5 * 1024 * 1024 : 8 * 1024 * 1024; // 5MB for mobile, 8MB for desktop
-  
-  console.log(`[Admin] Processing image: ${file.name} (${formatBytes(file.size)}) - Mobile: ${onMobile}`);
-  
   try {
-    let processedFile = file;
-    
-    // Step 1: Convert HEIC/HEIF files to JPEG first (common on iOS)
-    if (isHeicFile(file)) {
-      showImageStatus(`Converting HEIC image...`, "");
-      console.log(`[Admin] Converting HEIC file: ${file.name} (${formatBytes(file.size)})`);
-      
-      try {
-        // Use lower quality (0.6) for HEIC conversion since we'll compress again
-        processedFile = await convertHeicToJpeg(file, { quality: 0.6, debug: true });
-        console.log(`[Admin] HEIC converted: ${processedFile.name} (${formatBytes(processedFile.size)})`);
-        showImageStatus(`Converted to JPEG (${formatBytes(processedFile.size)})`, "success");
-      } catch (heicError) {
-        console.error("[Admin] HEIC conversion failed:", heicError);
-        showImageStatus(`HEIC conversion failed: ${heicError.message}`, "error");
-        return;
-      }
-    }
-    
-    // Step 2: ALWAYS process through canvas compression for consistent results
-    // This ensures all images (especially HEIC conversions) are properly compressed
-    let uploadFile;
-    const HARD_LIMIT = 9 * 1024 * 1024; // 9MB - stay under Cloudinary's 10MB limit
-    
-    // Always compress if file is over 5MB OR if we're on mobile
-    const needsCompression = processedFile.size > MAX_SIZE || onMobile;
-    
-    console.log(`[Admin] File size: ${formatBytes(processedFile.size)}, Mobile: ${onMobile}, Needs compression: ${needsCompression}`);
-    
-    if (needsCompression || processedFile.size > HARD_LIMIT) {
-      showImageStatus(`Optimizing image (${formatBytes(processedFile.size)})...`, "");
-      
-      try {
-        const result = await processImageForMobile(processedFile, {
-          maxSizeBytes: Math.min(MAX_SIZE, HARD_LIMIT),
-          quality: onMobile ? 0.75 : 0.82, // More aggressive on mobile
-          maxWidth: onMobile ? 2048 : 3072,
-          maxHeight: onMobile ? 2048 : 3072,
-          debug: true,
-        });
-        
-        console.log(`[Admin] Compression result: ${formatBytes(result.originalSize)} → ${formatBytes(result.finalSize)}`);
-        
-        if (!result.blob || result.blob.size === 0) {
-          throw new Error('Compression produced empty result');
-        }
-        
-        showImageStatus(`Optimized to ${formatBytes(result.finalSize)}, uploading...`, "success");
-        
-        // Create a new File object from the blob
-        const newFileName = processedFile.name.replace(/\.[^.]+$/, '.jpg');
-        uploadFile = new File([result.blob], newFileName, { 
-          type: 'image/jpeg' 
-        });
-        
-        console.log(`[Admin] Final uploadFile size: ${formatBytes(uploadFile.size)}`);
-        
-      } catch (compressionError) {
-        console.error('[Admin] Compression failed:', compressionError);
-        showImageStatus(`Compression failed: ${compressionError.message}. Try a smaller image.`, "error");
-        return; // DO NOT proceed with upload
-      }
-    } else {
-      // File is small enough, use as-is
-      uploadFile = processedFile;
-      console.log(`[Admin] Using file as-is: ${formatBytes(uploadFile.size)}`);
-    }
-    
-    // Step 3: Final safety check - HARD BLOCK if still over 10MB (Cloudinary limit)
-    const CLOUDINARY_LIMIT = 10 * 1024 * 1024; // 10MB hard limit
-    if (uploadFile.size > CLOUDINARY_LIMIT) {
-      console.error(`[Admin] BLOCKED: File still too large after compression: ${formatBytes(uploadFile.size)}`);
-      showImageStatus(`Image too large (${formatBytes(uploadFile.size)}). Please use a smaller image.`, "error");
-      return;
-    }
-    
-    // Step 4: Upload to Cloudinary
-    showImageStatus(`Uploading (${formatBytes(uploadFile.size)})...`, "");
-    console.log(`[Admin] Uploading: ${uploadFile.name} (${formatBytes(uploadFile.size)})`);
-    
-    const imageUrl = await uploadToCloudinary(uploadFile);
+    // Upload to Cloudinary
+    const imageUrl = await uploadToCloudinary(file);
     
     // Add to current images array
     currentImages.push(imageUrl);
@@ -388,54 +290,11 @@ function addImagePreview(url, index) {
   removeBtn.className = "admin-image-preview__remove";
   removeBtn.setAttribute("aria-label", `Remove image ${index + 1}`);
   removeBtn.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i>';
-  removeBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    removeImage(index);
-  });
-  
-  // Make primary button (only shown when image is clicked and not already primary)
-  const makePrimaryBtn = document.createElement("button");
-  makePrimaryBtn.type = "button";
-  makePrimaryBtn.className = "admin-image-preview__make-primary";
-  makePrimaryBtn.textContent = "Make primary?";
-  makePrimaryBtn.hidden = true;
-  makePrimaryBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    makePrimaryImage(index);
-  });
-  
-  // Make image clickable in edit mode (when editingItem exists)
-  if (editingItem && index > 0) {
-    previewItem.style.cursor = "pointer";
-    previewItem.addEventListener("click", () => {
-      // Hide all other "Make primary?" buttons
-      document.querySelectorAll(".admin-image-preview__make-primary").forEach(btn => {
-        btn.hidden = true;
-      });
-      // Show this one
-      makePrimaryBtn.hidden = false;
-    });
-  }
+  removeBtn.addEventListener("click", () => removeImage(index));
   
   previewItem.appendChild(img);
   previewItem.appendChild(removeBtn);
-  previewItem.appendChild(makePrimaryBtn);
   imagesPreviewGrid.appendChild(previewItem);
-}
-
-function makePrimaryImage(index) {
-  if (index === 0 || index >= currentImages.length) return;
-  
-  // Swap the clicked image with the first image
-  const temp = currentImages[0];
-  currentImages[0] = currentImages[index];
-  currentImages[index] = temp;
-  
-  // Update the input
-  updateImagesInput();
-  
-  // Re-render preview grid
-  renderImagePreviews();
 }
 
 function removeImage(index) {
@@ -661,10 +520,6 @@ function closeModal() {
   modalStatus.hidden = true;
   // Reset submit button state when closing
   modalSubmit.disabled = false;
-  // Reset delete button state when closing
-  if (modalDelete) {
-    modalDelete.disabled = false;
-  }
 }
 
 // =====================================================
@@ -726,8 +581,6 @@ function init() {
       await deleteDoc(doc(db, "items", editingItem.id));
       closeModal();
       await loadItems();
-      // Reset delete button state after successful deletion
-      modalDelete.disabled = false;
     } catch (err) {
       console.error("Delete failed", err);
       modalStatus.textContent = "Error deleting item.";
@@ -777,25 +630,10 @@ function init() {
     renderRequests();
   });
 
-  // Admin tag filter dropdown toggle
-  adminTagFilterDropdownBtn?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const isExpanded = adminTagFilterDropdownBtn.getAttribute("aria-expanded") === "true";
-    const newExpandedState = !isExpanded;
-    adminTagFilterDropdownBtn.setAttribute("aria-expanded", newExpandedState.toString());
-    if (adminTagFilterDropdownMenu) {
-      adminTagFilterDropdownMenu.hidden = !newExpandedState;
-    }
-  });
-
-  // Close dropdown when clicking outside
-  document.addEventListener("click", (e) => {
-    if (adminTagFilterDropdownBtn && adminTagFilterDropdownMenu) {
-      if (!adminTagFilterDropdownBtn.contains(e.target) && !adminTagFilterDropdownMenu.contains(e.target)) {
-        adminTagFilterDropdownBtn.setAttribute("aria-expanded", "false");
-        adminTagFilterDropdownMenu.hidden = true;
-      }
-    }
+  // Filter items by tag
+  itemsTagFilter?.addEventListener("change", () => {
+    activeItemsTagFilter = itemsTagFilter.value;
+    renderItems();
   });
 
   // Escape key
@@ -925,138 +763,46 @@ function extractAllTags(items) {
   return Array.from(tagSet).sort();
 }
 
-// Extract tags with display format for filtering
-function extractTagsForFiltering(items) {
-  const tagMap = new Map();
+function updateItemsSubtitle() {
+  if (!itemsPanelSubtitle) return;
+  itemsPanelSubtitle.textContent = `${items.length} total items on the site`;
+}
+
+function renderItemsTagFilterOptions() {
+  if (!itemsTagFilter) return;
+
+  const tagCounts = new Map();
   items.forEach((item) => {
-    if (item.tags && Array.isArray(item.tags)) {
-      item.tags.forEach((tag) => {
-        const normalized = normalizeTag(tag);
-        if (!tagMap.has(normalized)) {
-          tagMap.set(normalized, formatTagForDisplay(tag));
-        }
-      });
-    }
-  });
-  return Array.from(tagMap.entries()).sort((a, b) => 
-    a[1].localeCompare(b[1])
-  );
-}
-
-// Render tag filter dropdown
-function renderAdminTagFilters(tags) {
-  allAvailableTags = tags;
-  if (!adminTagFilterDropdownMenu) return;
-  
-  adminTagFilterDropdownMenu.innerHTML = "";
-  
-  // Ensure dropdown is hidden initially
-  adminTagFilterDropdownMenu.hidden = true;
-  if (adminTagFilterDropdownBtn) {
-    adminTagFilterDropdownBtn.setAttribute("aria-expanded", "false");
-  }
-
-  // Initialize all tags as active by default
-  activeTags.clear();
-  tags.forEach(([normalizedTag]) => {
-    activeTags.add(normalizedTag);
-  });
-
-  tags.forEach(([normalizedTag, displayTag]) => {
-    const label = document.createElement("label");
-    label.className = "tag-filter-option";
-    label.setAttribute("role", "menuitemcheckbox");
-    label.setAttribute("aria-checked", "true");
-    
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.className = "tag-filter-checkbox";
-    checkbox.checked = true;
-    checkbox.setAttribute("data-tag", normalizedTag);
-    checkbox.addEventListener("change", () => toggleAdminTagFilter(normalizedTag, checkbox));
-    
-    const span = document.createElement("span");
-    span.className = "tag-filter-label";
-    span.textContent = displayTag;
-    
-    label.appendChild(checkbox);
-    label.appendChild(span);
-    adminTagFilterDropdownMenu.appendChild(label);
-  });
-
-  updateAdminFilterButtonText();
-  applyAdminFilters();
-}
-
-function toggleAdminTagFilter(tag, checkbox) {
-  if (checkbox.checked) {
-    activeTags.add(tag);
-  } else {
-    activeTags.delete(tag);
-  }
-  
-  const label = checkbox.closest(".tag-filter-option");
-  if (label) {
-    label.setAttribute("aria-checked", checkbox.checked ? "true" : "false");
-  }
-  
-  updateAdminFilterButtonText();
-  applyAdminFilters();
-}
-
-function updateAdminFilterButtonText() {
-  if (!adminTagFilterDropdownText) return;
-  const totalTags = allAvailableTags.length;
-  const activeCount = activeTags.size;
-  
-  if (activeCount === 0) {
-    adminTagFilterDropdownText.textContent = "No Tags Selected";
-  } else if (activeCount === totalTags) {
-    adminTagFilterDropdownText.textContent = "All Tags";
-  } else {
-    adminTagFilterDropdownText.textContent = `${activeCount} of ${totalTags} Tags`;
-  }
-}
-
-function applyAdminFilters() {
-  // If all tags are active, show all items
-  // If no tags are active, show nothing
-  // Otherwise, filter by active tags
-  if (allAvailableTags.length === 0) {
-    // No tags available, show all items
-    filteredItems = [...items];
-  } else if (activeTags.size === allAvailableTags.length) {
-    // All tags selected, show all items
-    filteredItems = [...items];
-  } else if (activeTags.size === 0) {
-    // No tags selected, show nothing
-    filteredItems = [];
-  } else {
-    // Some tags selected, filter items that have at least one of the active tags
-    filteredItems = items.filter((item) => {
-      if (!item.tags || !Array.isArray(item.tags) || item.tags.length === 0) {
-        return false; // Items without tags don't match any filter
-      }
-      // Check if item has at least one tag that matches an active tag
-      return item.tags.some((tag) => {
-        const normalized = normalizeTag(tag);
-        return activeTags.has(normalized);
-      });
+    if (!item.tags || !Array.isArray(item.tags)) return;
+    item.tags.forEach((tag) => {
+      const normalized = normalizeTag(tag);
+      if (ADMIN_HIDDEN_FILTER_TAGS.includes(normalized)) return;
+      tagCounts.set(normalized, (tagCounts.get(normalized) || 0) + 1);
     });
-  }
-  
-  renderItems();
-  updateItemCounter();
-}
+  });
 
-function updateItemCounter() {
-  const total = items.length;
-  const subtitle = document.getElementById("admin-items-subtitle");
-  
-  // Update subtitle with total items
-  if (subtitle) {
-    subtitle.textContent = `${total} total item${total !== 1 ? 's' : ''} on the site`;
+  const sortedTags = Array.from(tagCounts.keys()).sort((a, b) =>
+    formatTagForDisplay(a).localeCompare(formatTagForDisplay(b))
+  );
+
+  itemsTagFilter.innerHTML = "";
+
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = "All Tags";
+  itemsTagFilter.appendChild(allOption);
+
+  sortedTags.forEach((tag) => {
+    const option = document.createElement("option");
+    option.value = tag;
+    option.textContent = `${formatTagForDisplay(tag)} (${tagCounts.get(tag)})`;
+    itemsTagFilter.appendChild(option);
+  });
+
+  if (!sortedTags.includes(activeItemsTagFilter)) {
+    activeItemsTagFilter = "all";
   }
+  itemsTagFilter.value = activeItemsTagFilter;
 }
 
 async function loadItems() {
@@ -1070,12 +816,9 @@ async function loadItems() {
     
     // Extract all existing tags for autocomplete
     allExistingTags = extractAllTags(items);
-    
-    // Extract tags for filtering and render filter dropdown
-    const tagsForFiltering = extractTagsForFiltering(items);
-    renderAdminTagFilters(tagsForFiltering);
-    
-    // applyAdminFilters() is called by renderAdminTagFilters, which will render items
+    updateItemsSubtitle();
+    renderItemsTagFilterOptions();
+    renderItems();
   } catch (err) {
     console.error("Failed to load items", err);
     itemsList.innerHTML = '<p class="admin-error">Error loading items.</p>';
@@ -1121,15 +864,28 @@ function formatPrice(price) {
 function renderItems() {
   itemsList.innerHTML = "";
   
-  // Ensure filteredItems is defined
-  if (!filteredItems || filteredItems.length === 0) {
+  if (!items.length) {
     itemsEmpty.hidden = false;
     return;
   }
   
   itemsEmpty.hidden = true;
-  
-  filteredItems.forEach((item) => {
+
+  const visibleItems = activeItemsTagFilter === "all"
+    ? items
+    : items.filter((item) =>
+        item.tags?.some((tag) => normalizeTag(tag) === activeItemsTagFilter)
+      );
+
+  if (!visibleItems.length) {
+    const empty = document.createElement("p");
+    empty.className = "admin-muted";
+    empty.textContent = "No items match this tag.";
+    itemsList.appendChild(empty);
+    return;
+  }
+
+  visibleItems.forEach((item) => {
     const row = document.createElement("div");
     row.className = "admin-item-row";
     row.setAttribute("tabindex", "0");
@@ -1252,7 +1008,7 @@ function renderRequests() {
   filtered.forEach((r) => {
     const card = document.createElement("article");
     card.className = "admin-request-card";
-
+    
     // Header section with item name and timestamp
     const header = document.createElement("header");
     header.className = "admin-request-card__header";
@@ -1277,21 +1033,21 @@ function renderRequests() {
     headerTop.appendChild(title);
     headerTop.appendChild(deleteBtn);
     
-    // Timestamp row
-    const headerMeta = document.createElement("div");
-    headerMeta.className = "admin-request-card__meta";
+    header.appendChild(headerTop);
     
-    // Timestamp
+    // Timestamp row
     const dateStr = formatRequestDate(r.createdAt);
     if (dateStr) {
+      const headerMeta = document.createElement("div");
+      headerMeta.className = "admin-request-card__meta";
+      
       const timestamp = document.createElement("time");
       timestamp.className = "admin-request-card__timestamp";
       timestamp.innerHTML = `<i class="fas fa-clock" aria-hidden="true"></i>${dateStr}`;
       headerMeta.appendChild(timestamp);
+      
+      header.appendChild(headerMeta);
     }
-    
-    header.appendChild(headerTop);
-    header.appendChild(headerMeta);
 
     // Body section with contact details
     const body = document.createElement("div");
