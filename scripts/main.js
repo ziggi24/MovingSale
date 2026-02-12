@@ -25,6 +25,7 @@ let currentSort = "default";
 let currentUser = null;
 let isAdmin = false;
 let currentModalItem = null;
+let loginPollInterval = null;
 
 // =====================================================
 // DOM ELEMENTS
@@ -376,6 +377,13 @@ async function init() {
   initHeroGlobe();
   bindGlobalEvents();
   watchAuth();
+
+  // If we're returning from a redirect login, start polling immediately
+  // so we catch the auth state as soon as Firebase resolves it.
+  if (sessionStorage.getItem("pendingModalItemId")) {
+    startLoginPoll();
+  }
+
   await loadItems();
   setupEventListeners();
 
@@ -431,6 +439,11 @@ function watchAuth() {
     currentUser = user;
     isAdmin = await checkIsAdmin(user?.uid);
     updateAuthUI();
+
+    // User logged in — stop the poll since we have a definitive answer
+    if (user) {
+      stopLoginPoll();
+    }
 
     // If the modal is currently open, refresh the request section to reflect auth state
     if (currentModalItem && modalOverlay.classList.contains("open")) {
@@ -1471,14 +1484,93 @@ function createInputField(labelText, id, value = "") {
 // =====================================================
 
 /**
+ * Stops the login poll interval and removes the visibility listener.
+ * Safe to call even if no poll is active.
+ */
+function stopLoginPoll() {
+  if (loginPollInterval) {
+    clearInterval(loginPollInterval);
+    loginPollInterval = null;
+  }
+  document.removeEventListener("visibilitychange", onVisibilityChangeForAuth);
+}
+
+/**
+ * Called when the tab becomes visible again (e.g. user returns from
+ * Google login popup/tab on mobile). Immediately checks auth state
+ * so we don't have to wait for the next poll tick.
+ */
+function onVisibilityChangeForAuth() {
+  if (document.visibilityState === "visible") {
+    pollAuthState();
+  }
+}
+
+/**
+ * Single check of Firebase's current auth state.
+ * If the user is now logged in, syncs our local state, refreshes
+ * the modal, and tears down the poll.
+ */
+function pollAuthState() {
+  const user = auth.currentUser;
+  if (user && !currentUser) {
+    // Firebase knows the user is logged in but our local state hasn't caught up
+    currentUser = user;
+    updateAuthUI();
+    stopLoginPoll();
+
+    // Refresh the modal request section if it's still open
+    if (currentModalItem && modalOverlay.classList.contains("open")) {
+      refreshModalRequestSection(currentModalItem);
+    }
+
+    // Also resolve any pending redirect-based modal restore
+    checkPendingModalItem();
+
+    // Kick off the admin check in the background (non-blocking)
+    checkIsAdmin(user.uid).then((admin) => {
+      isAdmin = admin;
+      updateAuthUI();
+    });
+  } else if (user && currentUser) {
+    // Already synced — stop polling, nothing more to do
+    stopLoginPoll();
+  }
+}
+
+/**
+ * Starts a 1-second poll that watches for login completion.
+ * Also listens for the tab becoming visible (instant detection
+ * when the user switches back from the Google login tab/popup).
+ * Automatically stops once the user is detected as logged in.
+ */
+function startLoginPoll() {
+  // Clean up any previous poll first
+  stopLoginPoll();
+
+  // Immediate first check
+  pollAuthState();
+
+  // Poll every second as a fallback
+  loginPollInterval = setInterval(pollAuthState, 1000);
+
+  // Instant check whenever the tab comes back into focus
+  document.addEventListener("visibilitychange", onVisibilityChangeForAuth);
+}
+
+/**
  * Handles login from within the item modal.
  * Saves the item ID to sessionStorage so we can restore the modal
  * after a redirect-based login (common on mobile).
  * Tries popup first; falls back to redirect if popup is blocked.
+ * Starts a poll to catch the login even if onAuthStateChanged is slow.
  */
 function handleModalLogin(item) {
   // Persist the item ID so we can reopen this modal after a redirect login
   sessionStorage.setItem("pendingModalItemId", item.id);
+
+  // Start polling for auth state changes (catches mobile edge cases)
+  startLoginPoll();
 
   signInWithPopup(auth, provider).catch((err) => {
     // Popup blocked or closed — fall back to redirect (works reliably on mobile)
@@ -1491,6 +1583,7 @@ function handleModalLogin(item) {
     } else {
       console.error("Login failed", err);
       sessionStorage.removeItem("pendingModalItemId");
+      stopLoginPoll();
     }
   });
 }
@@ -1565,6 +1658,7 @@ function checkPendingModalItem() {
 
 function closeModal() {
   currentModalItem = null;
+  stopLoginPoll();
   modalOverlay.classList.remove("open");
   modalOverlay.setAttribute("aria-hidden", "true");
   document.body.style.overflow = "";
