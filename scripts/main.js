@@ -2,6 +2,7 @@ import {
   auth,
   provider,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   onAuthStateChanged,
   db,
@@ -23,6 +24,7 @@ let activeTags = new Set();
 let currentSort = "default";
 let currentUser = null;
 let isAdmin = false;
+let currentModalItem = null;
 
 // =====================================================
 // DOM ELEMENTS
@@ -376,6 +378,11 @@ async function init() {
   watchAuth();
   await loadItems();
   setupEventListeners();
+
+  // After items are loaded, check if we need to restore a modal from a redirect login.
+  // (onAuthStateChanged may have already fired before loadItems finished,
+  //  so we re-check here to handle the race condition.)
+  checkPendingModalItem();
 }
 
 function bindGlobalEvents() {
@@ -424,6 +431,16 @@ function watchAuth() {
     currentUser = user;
     isAdmin = await checkIsAdmin(user?.uid);
     updateAuthUI();
+
+    // If the modal is currently open, refresh the request section to reflect auth state
+    if (currentModalItem && modalOverlay.classList.contains("open")) {
+      refreshModalRequestSection(currentModalItem);
+    }
+
+    // If user just logged in, check if we need to restore a modal from a redirect login
+    if (user) {
+      checkPendingModalItem();
+    }
   });
 }
 
@@ -1216,6 +1233,7 @@ function createImageCarousel(images, altText, item = null) {
 // MODAL
 // =====================================================
 function openModal(item) {
+  currentModalItem = item;
   modalBody.innerHTML = "";
 
   // Get images array
@@ -1312,7 +1330,7 @@ function openModal(item) {
     loginBtn.type = "button";
     loginBtn.className = "primary-btn";
     loginBtn.innerHTML = '<i class="fab fa-google" style="margin-right: 0.5rem;"></i>Login with Google';
-    loginBtn.addEventListener("click", () => authBtn.click());
+    loginBtn.addEventListener("click", () => handleModalLogin(item));
     requestContent.appendChild(loginPrompt);
     requestContent.appendChild(loginBtn);
   } else {
@@ -1448,7 +1466,105 @@ function createInputField(labelText, id, value = "") {
   return wrapper;
 }
 
+// =====================================================
+// MODAL LOGIN & AUTH REACTIVITY
+// =====================================================
+
+/**
+ * Handles login from within the item modal.
+ * Saves the item ID to sessionStorage so we can restore the modal
+ * after a redirect-based login (common on mobile).
+ * Tries popup first; falls back to redirect if popup is blocked.
+ */
+function handleModalLogin(item) {
+  // Persist the item ID so we can reopen this modal after a redirect login
+  sessionStorage.setItem("pendingModalItemId", item.id);
+
+  signInWithPopup(auth, provider).catch((err) => {
+    // Popup blocked or closed — fall back to redirect (works reliably on mobile)
+    if (
+      err.code === "auth/popup-blocked" ||
+      err.code === "auth/popup-closed-by-user" ||
+      err.code === "auth/cancelled-popup-request"
+    ) {
+      signInWithRedirect(auth, provider);
+    } else {
+      console.error("Login failed", err);
+      sessionStorage.removeItem("pendingModalItemId");
+    }
+  });
+}
+
+/**
+ * Rebuilds the request section inside the currently open modal
+ * to reflect the current auth state (logged in → show form, logged out → show login).
+ */
+function refreshModalRequestSection(item) {
+  const requestSection = modalBody.querySelector(".request-section");
+  if (!requestSection) return;
+
+  const requestContent = requestSection.querySelector(".request-content");
+  if (!requestContent) return;
+
+  // Clear existing content
+  requestContent.innerHTML = "";
+
+  if (!currentUser) {
+    const loginPrompt = document.createElement("p");
+    loginPrompt.className = "request-login";
+    loginPrompt.textContent = "Please login to request this item.";
+    const loginBtn = document.createElement("button");
+    loginBtn.type = "button";
+    loginBtn.className = "primary-btn";
+    loginBtn.innerHTML =
+      '<i class="fab fa-google" style="margin-right: 0.5rem;"></i>Login with Google';
+    loginBtn.addEventListener("click", () => handleModalLogin(item));
+    requestContent.appendChild(loginPrompt);
+    requestContent.appendChild(loginBtn);
+  } else {
+    const form = buildRequestForm(item);
+    requestContent.appendChild(form);
+
+    // Auto-expand the request section so the user sees the form immediately
+    requestContent.hidden = false;
+    const toggleBtn = requestSection.querySelector(".request-toggle-btn");
+    if (toggleBtn) {
+      toggleBtn.classList.add("expanded");
+      toggleBtn.setAttribute("aria-expanded", "true");
+    }
+  }
+}
+
+/**
+ * After a redirect login (or delayed auth resolution), checks sessionStorage
+ * for a saved item ID and reopens the modal with the request form visible.
+ * Only proceeds when all three conditions are met: pending ID exists,
+ * user is logged in, and items have been loaded.
+ */
+function checkPendingModalItem() {
+  const pendingItemId = sessionStorage.getItem("pendingModalItemId");
+  if (!pendingItemId || !currentUser || allItems.length === 0) return;
+
+  sessionStorage.removeItem("pendingModalItemId");
+
+  // Don't reopen if the modal is already showing this item
+  if (currentModalItem && currentModalItem.id === pendingItemId) return;
+
+  const item = allItems.find((i) => i.id === pendingItemId);
+  if (item) {
+    openModal(item);
+    // Auto-expand the request section after a brief delay for DOM to settle
+    setTimeout(() => {
+      const toggleBtn = modalBody.querySelector(".request-toggle-btn");
+      if (toggleBtn && !toggleBtn.classList.contains("expanded")) {
+        toggleBtn.click();
+      }
+    }, 100);
+  }
+}
+
 function closeModal() {
+  currentModalItem = null;
   modalOverlay.classList.remove("open");
   modalOverlay.setAttribute("aria-hidden", "true");
   document.body.style.overflow = "";
