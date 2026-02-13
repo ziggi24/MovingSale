@@ -2851,22 +2851,77 @@ a {
     padding: var(--space-md);
     background: var(--color-bg);
     border-top: 1px solid var(--color-border);
+    align-items: start; /* Don't stretch items to row height - only the clicked item grows for the slide-out */
 }
 
 .admin-image-preview-item {
     position: relative;
-    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
     background: var(--color-bg-hover);
     border-radius: var(--radius-md);
     overflow: hidden;
     border: 1px solid var(--color-border);
 }
 
-.admin-image-preview-item img {
+.admin-image-preview-item__image {
+    position: relative;
+    aspect-ratio: 1;
+    overflow: hidden;
+}
+
+.admin-image-preview-item__image img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
+}
+
+/* Slide-out "Make primary" - only appears when user clicks a non-primary image */
+.admin-image-preview-item__slideout {
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-bg-hover);
+    border-top: 1px solid var(--color-border);
+    transition: max-height 0.2s ease-out;
+}
+
+.admin-image-preview-item__slideout--visible {
+    max-height: 2.5rem;
+}
+
+.admin-image-preview-item__slideout .admin-image-preview__make-primary {
+    margin: var(--space-xs) 0;
+}
+
+.admin-image-preview__make-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.5rem;
+    background: transparent;
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.admin-image-preview__make-primary:hover {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+    background: rgba(212, 165, 116, 0.08);
+}
+
+.admin-image-preview__make-primary i {
+    font-size: 0.6rem;
+    opacity: 0.9;
 }
 
 .admin-image-preview__remove {
@@ -2891,6 +2946,16 @@ a {
 .admin-image-preview__remove:hover {
     background: #ef4444;
     transform: scale(1.1);
+}
+
+/* Primary image indicator (first image in list = main feed image) */
+.admin-image-preview-item--primary {
+    outline: 1px solid var(--color-accent);
+    outline-offset: -1px;
+}
+
+.admin-image-preview-item:not(.admin-image-preview-item--primary) .admin-image-preview-item__image {
+    cursor: pointer;
 }
 
 /* Legacy single image preview (for backward compatibility) */

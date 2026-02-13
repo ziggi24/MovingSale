@@ -15,6 +15,7 @@ import {
   doc,
   checkIsAdmin,
 } from "./firebaseClient.js";
+import { prepareImageForUpload } from "./imageResizer.js";
 
 // =====================================================
 // CLOUDINARY CONFIGURATION
@@ -193,18 +194,37 @@ async function handleImageFiles(files) {
     return;
   }
 
-  // Validate each file
-  for (const file of imageFiles) {
-    if (file.size > 10 * 1024 * 1024) {
-      showImageStatus(`Image "${file.name}" must be less than 10MB.`, "error");
-      return;
-    }
-  }
+  const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB hard limit for Cloudinary
+  const RESIZE_TARGET_BYTES = 8 * 1024 * 1024; // Resize images larger than 8MB
 
-  // Process files sequentially
+  // Process and upload files sequentially (resize any image > 8MB first)
   for (let i = 0; i < imageFiles.length; i++) {
     const file = imageFiles[i];
-    await handleImageFile(file);
+    let fileToUpload = file;
+
+    try {
+      const result = await prepareImageForUpload(file, {
+        maxSizeBytes: RESIZE_TARGET_BYTES,
+      });
+      // Resizer returns original file if under limit, else a Blob
+      if (result.blob instanceof File) {
+        fileToUpload = result.blob;
+      } else {
+        fileToUpload = new File([result.blob], file.name.replace(/\.[^.]+$/, ".jpg"), {
+          type: result.blob.type || "image/jpeg",
+        });
+      }
+      if (fileToUpload.size > MAX_UPLOAD_BYTES) {
+        showImageStatus(`Image "${file.name}" could not be resized below 10MB.`, "error");
+        return;
+      }
+    } catch (err) {
+      console.error("Image resize failed:", err);
+      showImageStatus(`Could not process image "${file.name}". Try a smaller or different format.`, "error");
+      return;
+    }
+
+    await handleImageFile(fileToUpload);
   }
   
   // Clear file input
@@ -275,26 +295,88 @@ function addImagePreview(url, index) {
   if (imagesPreviewGrid.hidden) {
     imagesPreviewGrid.hidden = false;
   }
-  
-  // Create preview element
+
+  const isPrimary = index === 0;
+
   const previewItem = document.createElement("div");
   previewItem.className = "admin-image-preview-item";
   previewItem.dataset.imageIndex = index;
-  
+  if (isPrimary) {
+    previewItem.classList.add("admin-image-preview-item--primary");
+  }
+
+  const imageWrap = document.createElement("div");
+  imageWrap.className = "admin-image-preview-item__image";
+
   const img = document.createElement("img");
   img.src = url;
   img.alt = `Preview ${index + 1}`;
-  
+
   const removeBtn = document.createElement("button");
   removeBtn.type = "button";
   removeBtn.className = "admin-image-preview__remove";
   removeBtn.setAttribute("aria-label", `Remove image ${index + 1}`);
   removeBtn.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i>';
-  removeBtn.addEventListener("click", () => removeImage(index));
-  
-  previewItem.appendChild(img);
-  previewItem.appendChild(removeBtn);
+  removeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    removeImage(index);
+  });
+
+  imageWrap.appendChild(img);
+  imageWrap.appendChild(removeBtn);
+  previewItem.appendChild(imageWrap);
+
+  // "Make primary" slide-out: only created and inserted when user clicks this (non-primary) image
+  if (!isPrimary) {
+    previewItem.addEventListener("click", (e) => {
+      if (e.target.closest(".admin-image-preview__remove")) return;
+
+      // Remove any existing slide-out from another image so only one is visible
+      imagesPreviewGrid.querySelectorAll(".admin-image-preview-item__slideout").forEach((el) => el.remove());
+
+      const slideOut = document.createElement("div");
+      slideOut.className = "admin-image-preview-item__slideout";
+
+      const primaryBtn = document.createElement("button");
+      primaryBtn.type = "button";
+      primaryBtn.className = "admin-image-preview__make-primary";
+      primaryBtn.setAttribute("aria-label", `Set image ${index + 1} as main image`);
+      primaryBtn.innerHTML = '<i class="fas fa-star" aria-hidden="true"></i> Make primary';
+      primaryBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        makeImagePrimary(index);
+      });
+
+      slideOut.appendChild(primaryBtn);
+      previewItem.appendChild(slideOut);
+
+      // Trigger slide animation after the node is in the DOM
+      requestAnimationFrame(() => {
+        slideOut.classList.add("admin-image-preview-item__slideout--visible");
+      });
+
+      const closeSlideOut = (e) => {
+        if (previewItem.contains(e.target)) return;
+        slideOut.classList.remove("admin-image-preview-item__slideout--visible");
+        document.removeEventListener("click", closeSlideOut);
+        slideOut.addEventListener("transitionend", () => slideOut.remove(), { once: true });
+      };
+      setTimeout(() => document.addEventListener("click", closeSlideOut), 0);
+    });
+  }
+
   imagesPreviewGrid.appendChild(previewItem);
+}
+
+function makeImagePrimary(index) {
+  if (index <= 0 || index >= currentImages.length) return;
+
+  const url = currentImages[index];
+  currentImages.splice(index, 1);
+  currentImages.unshift(url);
+  updateImagesInput();
+  renderImagePreviews();
+  showImageStatus("Main image updated.", "success");
 }
 
 function removeImage(index) {
